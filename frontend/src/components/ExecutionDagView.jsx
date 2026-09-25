@@ -3,7 +3,7 @@ import { DAG_NODES } from '../data/pipelineData';
 
 export default function ExecutionDagView({
   hasLeakage,
-  currentStep,
+  _currentStep,
   onSelectNode
 }) {
   return (
@@ -74,7 +74,9 @@ export default function ExecutionDagView({
                   <span className="font-code-sm text-code-sm text-primary font-bold font-mono truncate">
                     {node.title}
                   </span>
-                  <span className="text-[10px] font-mono text-outline">Cell [{node.cell}]</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border border-current/20 ${badgeColor}`}>
+                    Cell [{node.cell}]
+                  </span>
                 </div>
 
                 {/* Node Body */}

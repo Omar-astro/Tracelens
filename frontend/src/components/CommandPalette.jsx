@@ -6,7 +6,8 @@ export default function CommandPalette({
   onSelectStepId,
   onSelectView,
   onApplyFix,
-  onOpenNewAudit
+  onOpenNewAudit,
+  onChangeMode
 }) {
   const [query, setQuery] = useState('');
 
@@ -16,7 +17,7 @@ export default function CommandPalette({
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         if (isOpen) onClose();
-        else onSelectStepId(-1); // trigger open if handler available
+        else onSelectStepId(-1);
       }
       if (e.key === 'Escape' && isOpen) {
         onClose();
@@ -29,16 +30,26 @@ export default function CommandPalette({
   if (!isOpen) return null;
 
   const actions = [
-    { id: 'jump-9', title: 'Jump to Step 09 (Data Leakage Point)', category: 'Execution Trace', icon: 'crisis_alert', run: () => onSelectStepId(9) },
-    { id: 'jump-14', title: 'Jump to Step 14 (Train/Test Split & Imbalance)', category: 'Execution Trace', icon: 'warning', run: () => onSelectStepId(14) },
-    { id: 'jump-31', title: 'Jump to Step 31 (Estimator Fit)', category: 'Execution Trace', icon: 'play_circle', run: () => onSelectStepId(31) },
-    { id: 'jump-42', title: 'Jump to Step 42 (Metric Evaluation)', category: 'Execution Trace', icon: 'insights', run: () => onSelectStepId(42) },
-    { id: 'view-dag', title: 'View Execution DAG Flow Graph', category: 'Navigation', icon: 'hub', run: () => onSelectView('visual-tracer') },
-    { id: 'view-code', title: 'View Code Auditor & Cell Inspector', category: 'Navigation', icon: 'bug_report', run: () => onSelectView('code-auditor') },
-    { id: 'view-leakage', title: 'View Leakage Forensic Inspector', category: 'Navigation', icon: 'security', run: () => onSelectView('leakage-inspector') },
-    { id: 'view-tensors', title: 'View Tensor Register Watcher', category: 'Navigation', icon: 'data_object', run: () => onSelectView('tensor-watcher') },
-    { id: 'apply-fix', title: 'Apply Zero-Contamination Patch (Bob AI)', category: 'Remediation', icon: 'auto_fix_high', run: () => onApplyFix() },
-    { id: 'new-audit', title: 'Start New Sandboxed Audit', category: 'Actions', icon: 'add_circle', run: () => onOpenNewAudit() },
+    // LogicLens Core Actions
+    { id: 'mode-logic', title: 'Switch to Mode 1: LogicLens (Teammate Handoff)', category: 'Lens Mode', icon: 'tune', run: () => onChangeMode && onChangeMode('logic_lens') },
+    { id: 'mode-model', title: 'Switch to Mode 2: ModelLens (ML Methodology)', category: 'Lens Mode', icon: 'shield', run: () => onChangeMode && onChangeMode('model_lens') },
+    { id: 'jump-safe-hook', title: 'Jump to Safe Hook [★ Line 25]', category: 'LogicLens', icon: 'star', run: () => onSelectView('logic-handoff') },
+    { id: 'view-logic-studio', title: 'View 4-Pane Studio Workspace', category: 'LogicLens', icon: 'dashboard', run: () => onSelectView('logic-studio') },
+    { id: 'view-logic-loops', title: 'View Loop Dial & Iteration Carousel', category: 'LogicLens', icon: 'sync', run: () => onSelectView('logic-loops') },
+    { id: 'view-logic-state', title: 'View State & Mutation Deltas', category: 'LogicLens', icon: 'memory', run: () => onSelectView('logic-state') },
+    
+    // ModelLens Actions
+    { id: 'jump-9', title: 'Jump to Step 09 (Data Leakage Point)', category: 'ModelLens', icon: 'crisis_alert', run: () => onSelectStepId(9) },
+    { id: 'jump-14', title: 'Jump to Step 14 (Train/Test Split & Imbalance)', category: 'ModelLens', icon: 'warning', run: () => onSelectStepId(14) },
+    { id: 'jump-31', title: 'Jump to Step 31 (Estimator Fit)', category: 'ModelLens', icon: 'play_circle', run: () => onSelectStepId(31) },
+    { id: 'view-dag', title: 'View Execution DAG Flow Graph', category: 'ModelLens', icon: 'hub', run: () => onSelectView('visual-tracer') },
+    { id: 'view-code', title: 'View Code Auditor & Cell Inspector', category: 'ModelLens', icon: 'bug_report', run: () => onSelectView('code-auditor') },
+    { id: 'view-leakage', title: 'View Leakage Forensic Inspector', category: 'ModelLens', icon: 'security', run: () => onSelectView('leakage-inspector') },
+    { id: 'view-tensors', title: 'View Tensor Register Watcher', category: 'ModelLens', icon: 'data_object', run: () => onSelectView('tensor-watcher') },
+    { id: 'apply-fix', title: 'Apply Zero-Contamination Patch (Bob AI)', category: 'ModelLens', icon: 'auto_fix_high', run: () => onApplyFix() },
+    
+    // General Actions
+    { id: 'new-audit', title: 'Start New Trace / Audit (Intake Dashboard)', category: 'Actions', icon: 'add_circle', run: () => onOpenNewAudit() },
   ];
 
   const filtered = actions.filter(a => a.title.toLowerCase().includes(query.toLowerCase()) || a.category.toLowerCase().includes(query.toLowerCase()));
@@ -57,7 +68,7 @@ export default function CommandPalette({
           <input
             autoFocus
             type="text"
-            placeholder="Type a command or step (e.g. leakage, DAG, jump 14)..."
+            placeholder="Type a command (e.g. hook, loop, leakage, DAG)..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="w-full bg-transparent font-code-sm text-code-sm text-on-surface focus:outline-none font-mono"

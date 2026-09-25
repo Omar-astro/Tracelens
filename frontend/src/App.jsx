@@ -1,14 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
-import InputPanel from './components/InputPanel';
+import ModeIntakeDashboard from './components/ModeIntakeDashboard';
+import LogicLensStudio from './components/LogicLensStudio';
 import TracePlayer from './components/TracePlayer';
 import ExecutionDagView from './components/ExecutionDagView';
 import LeakageInspectorView from './components/LeakageInspectorView';
 import TensorWatcherView from './components/TensorWatcherView';
 import BobAiAuditPanel from './components/BobAiAuditPanel';
-import NewAuditModal from './components/NewAuditModal';
 import CommandPalette from './components/CommandPalette';
+import LoopVisualizer from './components/LoopVisualizer';
+import BranchVisualizer from './components/BranchVisualizer';
+import StateBoard from './components/StateBoard';
+import TeammateHandoffDrawer from './components/TeammateHandoffDrawer';
+
+import {
+  TEAMMATE_PIPELINE_CODE,
+  LOGICLENS_TRACE_STEPS
+} from './data/logicLensData';
+
 import { 
   SAMPLE_CODE_DEFAULT, 
   SAMPLE_CODE_REMEDIATED, 
@@ -17,31 +27,121 @@ import {
 import { SAMPLE_CODE_IMBALANCE } from './components/InputPanel';
 
 export default function App() {
-  const [mainMode, setMainMode] = useState('trace'); // 'trace' | 'input'
-  const [activeView, setActiveView] = useState('code-auditor');
-  const [currentStepIndex, setCurrentStepIndex] = useState(3); // Step 14 (train_test_split)
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [code, setCode] = useState(SAMPLE_CODE_DEFAULT);
+  // App Navigation States
+  const [mainScreen, setMainScreen] = useState('studio'); // 'studio' | 'intake'
+  const [currentLensMode, setCurrentLensMode] = useState('logic_lens'); // 'logic_lens' (Mode 1) | 'model_lens' (Mode 2)
+  const [activeView, setActiveView] = useState('logic-studio'); // Logic: 'logic-studio' | 'logic-loops' | 'logic-state' | 'logic-handoff'
+                                                                 // Model: 'code-auditor' | 'visual-tracer' | 'leakage-inspector' | 'tensor-watcher' | 'remediation-diff'
+  const [isSandboxExecuting, setIsSandboxExecuting] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  // --- MODE 1: LogicLens State ---
+  const [logicCode, setLogicCode] = useState(TEAMMATE_PIPELINE_CODE);
+  const [logicFileName, setLogicFileName] = useState('teammate_pipeline.py');
+  const [currentLogicStepIndex, setCurrentLogicStepIndex] = useState(3); // Start at Iteration 1 header
+  const [isLogicPlaying, setIsLogicPlaying] = useState(false);
+  const [logicPlaybackSpeed, setLogicPlaybackSpeed] = useState(1);
+
+  // --- MODE 2: ModelLens State ---
+  const [modelCode, setModelCode] = useState(SAMPLE_CODE_DEFAULT);
+  const [modelFileName, setModelFileName] = useState('churn_prediction.ipynb');
+  const [currentModelStepIndex, setCurrentModelStepIndex] = useState(3); // Step 14
+  const [isModelPlaying, setIsModelPlaying] = useState(false);
   const [hasLeakage, setHasLeakage] = useState(true);
   const [isRemediated, setIsRemediated] = useState(false);
-  const [currentFileName, setCurrentFileName] = useState('churn_prediction.ipynb');
-  const [selectedLineNumber, setSelectedLineNumber] = useState(14);
-  const [isNewAuditModalOpen, setIsNewAuditModalOpen] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isSandboxExecuting, setIsSandboxExecuting] = useState(false);
-  const [activeScenarioId, setActiveScenarioId] = useState('leakage'); // 'leakage' | 'imbalance' | 'clean'
-
+  const [activeScenarioId, setActiveScenarioId] = useState('leakage');
   const [assertions, setAssertions] = useState({
     trainTestSplit: 'FAIL',
     fitVsTransform: 'FAIL',
     weightNormBounds: 'PASS'
   });
 
-  const traceSteps = INITIAL_TRACE_STEPS;
+  const logicSteps = LOGICLENS_TRACE_STEPS;
+  const modelSteps = INITIAL_TRACE_STEPS;
 
-  // Apply Remediation Fix
+  // Global Keyboard Navigation (Space to play/pause, Left/Right to step, Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if focus is in an input or textarea
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (currentLensMode === 'logic_lens') {
+          setIsLogicPlaying((prev) => !prev);
+        } else {
+          setIsModelPlaying((prev) => !prev);
+        }
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        if (currentLensMode === 'logic_lens') {
+          setCurrentLogicStepIndex((prev) => Math.max(0, prev - 1));
+        } else {
+          setCurrentModelStepIndex((prev) => Math.max(0, prev - 1));
+        }
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        if (currentLensMode === 'logic_lens') {
+          setCurrentLogicStepIndex((prev) => Math.min(logicSteps.length - 1, prev + 1));
+        } else {
+          setCurrentModelStepIndex((prev) => Math.min(modelSteps.length - 1, prev + 1));
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentLensMode, logicSteps.length, modelSteps.length]);
+
+  // Mode Switcher handler
+  const handleSwitchMode = (newMode) => {
+    setIsSandboxExecuting(true);
+    setTimeout(() => {
+      setIsSandboxExecuting(false);
+      setCurrentLensMode(newMode);
+      if (newMode === 'logic_lens') {
+        setActiveView('logic-studio');
+      } else {
+        setActiveView('code-auditor');
+      }
+      setMainScreen('studio');
+    }, 350);
+  };
+
+  // Launch from Intake Dashboard
+  const handleLaunchTrace = ({ mode, code: inputCode, fileName: inputFileName }) => {
+    setIsSandboxExecuting(true);
+    setTimeout(() => {
+      setIsSandboxExecuting(false);
+      setCurrentLensMode(mode);
+      if (mode === 'logic_lens') {
+        setLogicCode(inputCode || TEAMMATE_PIPELINE_CODE);
+        setLogicFileName(inputFileName || 'teammate_pipeline.py');
+        setCurrentLogicStepIndex(0);
+        setActiveView('logic-studio');
+      } else {
+        setModelCode(inputCode || SAMPLE_CODE_DEFAULT);
+        setModelFileName(inputFileName || 'churn_prediction.ipynb');
+        const detected = inputCode.includes('fit_transform') && inputCode.includes('train_test_split') && (inputCode.indexOf('fit_transform') < inputCode.indexOf('train_test_split'));
+        setHasLeakage(detected);
+        setIsRemediated(!detected);
+        setAssertions({
+          trainTestSplit: detected ? 'FAIL' : 'PASS',
+          fitVsTransform: detected ? 'FAIL' : 'PASS',
+          weightNormBounds: 'PASS'
+        });
+        setCurrentModelStepIndex(1);
+        setActiveView('code-auditor');
+      }
+      setMainScreen('studio');
+    }, 700);
+  };
+
+  // Mode 2 Remediation Handlers
   const handleApplyFix = () => {
-    setCode(SAMPLE_CODE_REMEDIATED);
+    setModelCode(SAMPLE_CODE_REMEDIATED);
     setHasLeakage(false);
     setIsRemediated(true);
     setActiveScenarioId('clean');
@@ -52,284 +152,323 @@ export default function App() {
     });
   };
 
-  // Re-run Sandbox
   const handleRerunSandbox = () => {
     setIsSandboxExecuting(true);
     setTimeout(() => {
       setIsSandboxExecuting(false);
-      setIsPlaying(false);
-      setCurrentStepIndex(0);
-    }, 700);
+      setIsModelPlaying(false);
+      setCurrentModelStepIndex(0);
+    }, 600);
   };
 
-  // Switch Planted Scenario directly from main page
   const handleSwitchPlantedScenario = (scenario) => {
     setIsSandboxExecuting(true);
     setTimeout(() => {
       setIsSandboxExecuting(false);
       setActiveScenarioId(scenario);
       if (scenario === 'leakage') {
-        setCode(SAMPLE_CODE_DEFAULT);
-        setCurrentFileName('leakage_example.ipynb');
+        setModelCode(SAMPLE_CODE_DEFAULT);
+        setModelFileName('leakage_example.ipynb');
         setHasLeakage(true);
         setIsRemediated(false);
-        setAssertions({
-          trainTestSplit: 'FAIL',
-          fitVsTransform: 'FAIL',
-          weightNormBounds: 'PASS'
-        });
-        setCurrentStepIndex(3);
+        setAssertions({ trainTestSplit: 'FAIL', fitVsTransform: 'FAIL', weightNormBounds: 'PASS' });
+        setCurrentModelStepIndex(3);
       } else if (scenario === 'imbalance') {
-        setCode(SAMPLE_CODE_IMBALANCE);
-        setCurrentFileName('imbalance_example.ipynb');
+        setModelCode(SAMPLE_CODE_IMBALANCE);
+        setModelFileName('imbalance_example.ipynb');
         setHasLeakage(false);
         setIsRemediated(false);
-        setAssertions({
-          trainTestSplit: 'PASS',
-          fitVsTransform: 'PASS',
-          weightNormBounds: 'PASS'
-        });
-        setCurrentStepIndex(3);
+        setAssertions({ trainTestSplit: 'PASS', fitVsTransform: 'PASS', weightNormBounds: 'PASS' });
+        setCurrentModelStepIndex(3);
       } else if (scenario === 'clean') {
-        setCode(SAMPLE_CODE_REMEDIATED);
-        setCurrentFileName('clean_pipeline.py');
+        setModelCode(SAMPLE_CODE_REMEDIATED);
+        setModelFileName('clean_pipeline.py');
         setHasLeakage(false);
         setIsRemediated(true);
-        setAssertions({
-          trainTestSplit: 'PASS',
-          fitVsTransform: 'PASS',
-          weightNormBounds: 'PASS'
-        });
-        setCurrentStepIndex(3);
+        setAssertions({ trainTestSplit: 'PASS', fitVsTransform: 'PASS', weightNormBounds: 'PASS' });
+        setCurrentModelStepIndex(3);
       }
-      setMainMode('trace');
+      setCurrentLensMode('model_lens');
       setActiveView('code-auditor');
-    }, 500);
+      setMainScreen('studio');
+    }, 400);
   };
 
-  // Handle Run Audit from Input Panel
-  const handleRunAudit = ({ code: newCode, fileName }) => {
-    setIsSandboxExecuting(true);
-    setTimeout(() => {
-      setIsSandboxExecuting(false);
-      setCode(newCode);
-      setCurrentFileName(fileName || 'custom_pipeline.py');
-      const detectedLeakage = newCode.includes('fit_transform') && newCode.includes('train_test_split') && (newCode.indexOf('fit_transform') < newCode.indexOf('train_test_split'));
-      setHasLeakage(detectedLeakage);
-      setIsRemediated(!detectedLeakage);
-      setAssertions({
-        trainTestSplit: detectedLeakage ? 'FAIL' : 'PASS',
-        fitVsTransform: detectedLeakage ? 'FAIL' : 'PASS',
-        weightNormBounds: 'PASS'
-      });
-      setCurrentStepIndex(1);
-      setMainMode('trace');
-      setActiveView('code-auditor');
-    }, 800);
-  };
-
-  const handleSelectStepId = (id) => {
-    if (id === -1) {
-      setIsCommandPaletteOpen(true);
-      return;
-    }
-    const idx = traceSteps.findIndex(s => s.stepId === id);
-    if (idx !== -1) {
-      setCurrentStepIndex(idx);
-    }
-  };
+  const currentLogicStep = logicSteps[currentLogicStepIndex] || logicSteps[0];
+  const currentModelStep = modelSteps[currentModelStepIndex] || modelSteps[0];
 
   return (
     <div className="min-h-screen w-full bg-background text-on-surface font-body-md select-none flex flex-col">
-      {/* Top Fixed Header */}
+      {/* 1. Global Navigation Bar */}
       <Navbar
-        currentFileName={currentFileName}
+        currentFileName={currentLensMode === 'logic_lens' ? logicFileName : modelFileName}
+        currentMode={currentLensMode}
+        onChangeMode={handleSwitchMode}
         criticalIssuesCount={hasLeakage ? 1 : 0}
         warningIssuesCount={1}
-        onOpenNewAudit={() => setMainMode('input')}
+        onOpenNewAudit={() => setMainScreen('intake')}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        currentStepNumber={currentLensMode === 'logic_lens' ? currentLogicStepIndex + 1 : currentModelStep.stepId}
+        totalSteps={currentLensMode === 'logic_lens' ? logicSteps.length : 42}
       />
 
-      {/* Main Container */}
+      {/* 2. Main Studio Body */}
       <div className="flex flex-1 pt-14">
-        {/* Left Docked Sidebar */}
-        <Sidebar
-          activeView={activeView}
-          onSelectView={(view) => {
-            setActiveView(view);
-            setMainMode('trace');
-          }}
-          assertions={assertions}
-        />
+        {/* Left Docked Sidebar (Hidden in Intake screen) */}
+        {mainScreen === 'studio' && (
+          <Sidebar
+            activeView={activeView}
+            onSelectView={(view) => {
+              setActiveView(view);
+              setMainScreen('studio');
+            }}
+            currentMode={currentLensMode}
+            onChangeMode={handleSwitchMode}
+            assertions={assertions}
+          />
+        )}
 
-        {/* Main Workspace (Offset by sidebar w-64) */}
-        <div className="pl-64 flex-1 flex flex-col min-w-0 bg-background">
-          {/* Main Page Top Navigation & Planted Scenarios Bar */}
-          <div className="bg-surface-container-lowest px-gutter py-2 border-b border-surface-variant/30 flex items-center justify-between flex-wrap gap-2">
-            {/* View Switcher: Trace Player vs Input Source */}
-            <div className="flex items-center gap-1 bg-surface-container-low p-1 rounded-lg border border-surface-variant/30">
-              <button
-                type="button"
-                onClick={() => setMainMode('trace')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded font-label-md text-label-md transition-all ${
-                  mainMode === 'trace'
-                    ? 'bg-surface-container-high text-primary shadow-sm font-semibold'
-                    : 'text-outline hover:text-on-surface'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[15px]">play_circle</span>
-                <span>Trace Player (Auditor)</span>
-              </button>
+        {/* Content Area */}
+        <div className={`flex-1 flex flex-col min-w-0 bg-background ${mainScreen === 'studio' ? 'pl-64' : 'pl-0'}`}>
+          {/* Top Sub-Bar: Quick Switcher & Planted Scenarios */}
+          {mainScreen === 'studio' && (
+            <div className="bg-surface-container-lowest px-gutter py-2 border-b border-surface-variant/30 flex items-center justify-between flex-wrap gap-2">
+              {/* Studio vs Ingest switcher */}
+              <div className="flex items-center gap-1 bg-surface-container-low p-1 rounded-lg border border-surface-variant/30">
+                <button
+                  type="button"
+                  onClick={() => setMainScreen('studio')}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded font-label-md text-label-md bg-surface-container-high text-primary shadow-sm font-semibold"
+                >
+                  <span className="material-symbols-outlined text-[15px]">play_circle</span>
+                  <span>{currentLensMode === 'logic_lens' ? 'LogicLens Studio' : 'ModelLens Auditor'}</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setMainMode('input')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded font-label-md text-label-md transition-all ${
-                  mainMode === 'input'
-                    ? 'bg-surface-container-high text-primary shadow-sm font-semibold'
-                    : 'text-outline hover:text-on-surface'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[15px]">input</span>
-                <span>Input Source & Ingest</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setMainScreen('intake')}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded font-label-md text-label-md text-outline hover:text-on-surface transition-all"
+                >
+                  <span className="material-symbols-outlined text-[15px]">input</span>
+                  <span>Intake &amp; Code Ingestion</span>
+                </button>
+              </div>
 
-            {/* Quick Planted Demo Scenarios (Implementation Plan §6 Phase 5) */}
-            <div className="flex items-center gap-2">
-              <span className="font-label-xs text-label-xs uppercase text-outline font-mono hidden sm:inline">
-                Planted Demo:
-              </span>
+              {/* Planted Demos for Evaluators */}
+              <div className="flex items-center gap-2">
+                <span className="font-label-xs text-label-xs uppercase text-outline font-mono hidden sm:inline">
+                  Judge Demos:
+                </span>
 
-              <button
-                type="button"
-                onClick={() => handleSwitchPlantedScenario('leakage')}
-                className={`px-2.5 py-1 rounded font-label-xs text-label-xs font-mono transition-all flex items-center gap-1 border ${
-                  activeScenarioId === 'leakage' && hasLeakage
-                    ? 'bg-error-container/20 text-error border-error/50 shadow-sm'
-                    : 'bg-surface-container text-on-surface-variant border-surface-variant/30 hover:border-error/40'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[13px]">crisis_alert</span>
-                <span>Demo 1: Data Leakage</span>
-              </button>
+                {/* Mode 1 Primary Demo Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSwitchMode('logic_lens');
+                    setCurrentLogicStepIndex(3);
+                  }}
+                  className={`px-2.5 py-1 rounded font-label-xs text-label-xs font-mono transition-all flex items-center gap-1 border ${
+                    currentLensMode === 'logic_lens'
+                      ? 'bg-secondary-container/20 text-secondary border-secondary/50 shadow-sm font-bold'
+                      : 'bg-surface-container text-on-surface-variant border-surface-variant/30 hover:border-secondary/40'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[13px]">handshake</span>
+                  <span>Mode 1: Teammate Handoff</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleSwitchPlantedScenario('imbalance')}
-                className={`px-2.5 py-1 rounded font-label-xs text-label-xs font-mono transition-all flex items-center gap-1 border ${
-                  activeScenarioId === 'imbalance'
-                    ? 'bg-tertiary-container/20 text-tertiary border-tertiary/50 shadow-sm'
-                    : 'bg-surface-container text-on-surface-variant border-surface-variant/30 hover:border-tertiary/40'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[13px]">warning</span>
-                <span>Demo 2: Class Imbalance</span>
-              </button>
+                {/* Mode 2 Leakage Demo Button */}
+                <button
+                  type="button"
+                  onClick={() => handleSwitchPlantedScenario('leakage')}
+                  className={`px-2.5 py-1 rounded font-label-xs text-label-xs font-mono transition-all flex items-center gap-1 border ${
+                    currentLensMode === 'model_lens' && activeScenarioId === 'leakage' && hasLeakage
+                      ? 'bg-error-container/20 text-error border-error/50 shadow-sm font-bold'
+                      : 'bg-surface-container text-on-surface-variant border-surface-variant/30 hover:border-error/40'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[13px]">crisis_alert</span>
+                  <span>Mode 2: Leakage Audit</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleSwitchPlantedScenario('clean')}
-                className={`px-2.5 py-1 rounded font-label-xs text-label-xs font-mono transition-all flex items-center gap-1 border ${
-                  activeScenarioId === 'clean' || isRemediated
-                    ? 'bg-secondary-container/20 text-secondary border-secondary/50 shadow-sm'
-                    : 'bg-surface-container text-on-surface-variant border-surface-variant/30 hover:border-secondary/40'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[13px]">verified</span>
-                <span>Sanitized Ref</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Sandbox Executing Simulation Banner */}
-          {isSandboxExecuting && (
-            <div className="w-full bg-primary-container/20 border-b border-primary/30 p-space-sm flex items-center justify-center gap-space-sm text-primary font-mono text-code-sm animate-pulse">
-              <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-              <span>Spawning isolated sandbox runner • Capturing per-line AST & DataFrame registers...</span>
+                {/* Mode 2 Imbalance Demo Button */}
+                <button
+                  type="button"
+                  onClick={() => handleSwitchPlantedScenario('imbalance')}
+                  className={`px-2.5 py-1 rounded font-label-xs text-label-xs font-mono transition-all flex items-center gap-1 border ${
+                    currentLensMode === 'model_lens' && activeScenarioId === 'imbalance'
+                      ? 'bg-tertiary-container/20 text-tertiary border-tertiary/50 shadow-sm font-bold'
+                      : 'bg-surface-container text-on-surface-variant border-surface-variant/30 hover:border-tertiary/40'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[13px]">warning</span>
+                  <span>Mode 2: Imbalance Skew</span>
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Main Body View */}
+          {/* Sandbox Running Spinner Banner */}
+          {isSandboxExecuting && (
+            <div className="w-full bg-primary-container/20 border-b border-primary/30 p-space-sm flex items-center justify-center gap-space-sm text-primary font-mono text-code-sm animate-pulse">
+              <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+              <span>Spawning sys.settrace deterministic sandbox • Capturing per-step AST registers &amp; deltas...</span>
+            </div>
+          )}
+
+          {/* 3. Main Workspace Router */}
           <main className="flex-1 overflow-y-auto">
-            {/* Mode A: Input Source & Ingest */}
-            {mainMode === 'input' && (
-              <InputPanel
-                onRunAudit={handleRunAudit}
+            {/* SCREEN 1: Intake & Mode Selection Landing Dashboard */}
+            {mainScreen === 'intake' && (
+              <ModeIntakeDashboard
+                onLaunchTrace={handleLaunchTrace}
                 isExecuting={isSandboxExecuting}
-                onCancel={() => setMainMode('trace')}
+                initialMode={currentLensMode}
               />
             )}
 
-            {/* Mode B: Trace Player (Auditor Workspace) */}
-            {mainMode === 'trace' && (
+            {/* SCREEN 2: Studio Workspace */}
+            {mainScreen === 'studio' && (
               <>
-                {activeView === 'code-auditor' && (
-                  <TracePlayer
-                    code={code}
-                    traceSteps={traceSteps}
-                    currentStepIndex={currentStepIndex}
-                    onSelectStep={setCurrentStepIndex}
-                    isPlaying={isPlaying}
-                    onTogglePlay={setIsPlaying}
-                    hasLeakage={hasLeakage}
-                    isRemediated={isRemediated}
-                    onApplyFix={handleApplyFix}
-                    onRerunSandbox={handleRerunSandbox}
-                    selectedLineNumber={selectedLineNumber}
-                    onSelectLine={setSelectedLineNumber}
-                    currentFileName={currentFileName}
-                  />
+                {/* ============================================================== */}
+                {/* MODE 1: LogicLens (Visual Walkthrough & Teammate Handoff)     */}
+                {/* ============================================================== */}
+                {currentLensMode === 'logic_lens' && (
+                  <>
+                    {/* Primary 4-Pane Studio Workspace (Plan §3.2) */}
+                    {activeView === 'logic-studio' && (
+                      <LogicLensStudio
+                        code={logicCode}
+                        traceSteps={logicSteps}
+                        currentStepIndex={currentLogicStepIndex}
+                        onSelectStepIndex={setCurrentLogicStepIndex}
+                        isPlaying={isLogicPlaying}
+                        onTogglePlay={setIsLogicPlaying}
+                        playbackSpeed={logicPlaybackSpeed}
+                        onChangePlaybackSpeed={setLogicPlaybackSpeed}
+                        onOpenSafeHookDrawer={() => {
+                          const idx = logicSteps.findIndex(s => s.line_number === 25);
+                          if (idx !== -1) setCurrentLogicStepIndex(idx);
+                        }}
+                      />
+                    )}
+
+                    {/* Dedicated Loop Visualizer Deep-Dive */}
+                    {activeView === 'logic-loops' && (
+                      <div className="p-gutter max-w-5xl mx-auto flex flex-col gap-gutter">
+                        <LoopVisualizer
+                          currentStep={currentLogicStep}
+                          onJumpToIteration={(stepId) => {
+                            const idx = logicSteps.findIndex(s => s.step_id === stepId);
+                            if (idx !== -1) setCurrentLogicStepIndex(idx);
+                            setActiveView('logic-studio');
+                          }}
+                          onJumpToLoopExit={() => {
+                            const idx = logicSteps.findIndex(s => s.event_type === 'loop_exit');
+                            if (idx !== -1) setCurrentLogicStepIndex(idx);
+                            setActiveView('logic-studio');
+                          }}
+                        />
+                        <BranchVisualizer currentStep={currentLogicStep} />
+                      </div>
+                    )}
+
+                    {/* Dedicated State & Mutation Board */}
+                    {activeView === 'logic-state' && (
+                      <div className="p-gutter max-w-5xl mx-auto">
+                        <StateBoard currentStep={currentLogicStep} />
+                      </div>
+                    )}
+
+                    {/* Dedicated Teammate Handoff & Safe Insertion Pins */}
+                    {activeView === 'logic-handoff' && (
+                      <div className="p-gutter max-w-5xl mx-auto">
+                        <TeammateHandoffDrawer
+                          currentStep={currentLogicStep}
+                          onJumpToSafeHook={() => {
+                            const idx = logicSteps.findIndex(s => s.line_number === 25);
+                            if (idx !== -1) setCurrentLogicStepIndex(idx);
+                            setActiveView('logic-studio');
+                          }}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {activeView === 'visual-tracer' && (
-                  <div className="p-gutter">
-                    <ExecutionDagView
-                      hasLeakage={hasLeakage}
-                      currentStep={traceSteps[currentStepIndex]}
-                      onSelectNode={(node) => {
-                        if (node.id === '3') {
-                          handleSelectStepId(9);
-                          setActiveView('code-auditor');
-                        } else if (node.id === '4') {
-                          handleSelectStepId(14);
-                          setActiveView('code-auditor');
-                        }
-                      }}
-                    />
-                  </div>
-                )}
+                {/* ============================================================== */}
+                {/* MODE 2: ModelLens (ML Methodology Auditor)                     */}
+                {/* ============================================================== */}
+                {currentLensMode === 'model_lens' && (
+                  <>
+                    {activeView === 'code-auditor' && (
+                      <TracePlayer
+                        code={modelCode}
+                        traceSteps={modelSteps}
+                        currentStepIndex={currentModelStepIndex}
+                        onSelectStep={setCurrentModelStepIndex}
+                        isPlaying={isModelPlaying}
+                        onTogglePlay={setIsModelPlaying}
+                        hasLeakage={hasLeakage}
+                        isRemediated={isRemediated}
+                        onApplyFix={handleApplyFix}
+                        onRerunSandbox={handleRerunSandbox}
+                        selectedLineNumber={14}
+                        onSelectLine={() => {}}
+                        currentFileName={modelFileName}
+                      />
+                    )}
 
-                {activeView === 'leakage-inspector' && (
-                  <div className="p-gutter">
-                    <LeakageInspectorView
-                      hasLeakage={hasLeakage}
-                      onApplyFix={handleApplyFix}
-                    />
-                  </div>
-                )}
+                    {activeView === 'visual-tracer' && (
+                      <div className="p-gutter">
+                        <ExecutionDagView
+                          hasLeakage={hasLeakage}
+                          currentStep={modelSteps[currentModelStepIndex]}
+                          onSelectNode={(node) => {
+                            if (node.id === '3') {
+                              setCurrentModelStepIndex(2); // Step 9
+                              setActiveView('code-auditor');
+                            } else if (node.id === '4') {
+                              setCurrentModelStepIndex(3); // Step 14
+                              setActiveView('code-auditor');
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
 
-                {activeView === 'tensor-watcher' && (
-                  <div className="p-gutter">
-                    <TensorWatcherView
-                      currentStep={traceSteps[currentStepIndex]}
-                    />
-                  </div>
-                )}
+                    {activeView === 'leakage-inspector' && (
+                      <div className="p-gutter">
+                        <LeakageInspectorView
+                          hasLeakage={hasLeakage}
+                          onApplyFix={handleApplyFix}
+                        />
+                      </div>
+                    )}
 
-                {activeView === 'remediation-diff' && (
-                  <div className="p-gutter max-w-4xl mx-auto flex flex-col gap-gutter">
-                    <BobAiAuditPanel
-                      hasLeakage={hasLeakage}
-                      onApplyFix={handleApplyFix}
-                      onRerunSandbox={handleRerunSandbox}
-                      isRemediated={isRemediated}
-                    />
-                    <LeakageInspectorView
-                      hasLeakage={hasLeakage}
-                      onApplyFix={handleApplyFix}
-                    />
-                  </div>
+                    {activeView === 'tensor-watcher' && (
+                      <div className="p-gutter">
+                        <TensorWatcherView
+                          currentStep={modelSteps[currentModelStepIndex]}
+                        />
+                      </div>
+                    )}
+
+                    {activeView === 'remediation-diff' && (
+                      <div className="p-gutter max-w-4xl mx-auto flex flex-col gap-gutter">
+                        <BobAiAuditPanel
+                          hasLeakage={hasLeakage}
+                          onApplyFix={handleApplyFix}
+                          onRerunSandbox={handleRerunSandbox}
+                          isRemediated={isRemediated}
+                        />
+                        <LeakageInspectorView
+                          hasLeakage={hasLeakage}
+                          onApplyFix={handleApplyFix}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -337,24 +476,35 @@ export default function App() {
         </div>
       </div>
 
-      {/* New Audit Modal (accessible from any view) */}
-      <NewAuditModal
-        isOpen={isNewAuditModalOpen}
-        onClose={() => setIsNewAuditModalOpen(false)}
-        onRunAudit={handleRunAudit}
-      />
-
       {/* Command Palette (Cmd + K) */}
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
-        onSelectStepId={handleSelectStepId}
-        onSelectView={(view) => {
-          setActiveView(view);
-          setMainMode('trace');
+        onSelectStepId={(id) => {
+          if (id === -1) {
+            setIsCommandPaletteOpen(true);
+            return;
+          }
+          if (currentLensMode === 'logic_lens') {
+            const idx = logicSteps.findIndex(s => s.step_id === id);
+            if (idx !== -1) setCurrentLogicStepIndex(idx);
+          } else {
+            const idx = modelSteps.findIndex(s => s.stepId === id);
+            if (idx !== -1) setCurrentModelStepIndex(idx);
+          }
         }}
+        onSelectView={(view) => {
+          if (view.startsWith('logic-')) {
+            setCurrentLensMode('logic_lens');
+          } else {
+            setCurrentLensMode('model_lens');
+          }
+          setActiveView(view);
+          setMainScreen('studio');
+        }}
+        onChangeMode={handleSwitchMode}
         onApplyFix={handleApplyFix}
-        onOpenNewAudit={() => setMainMode('input')}
+        onOpenNewAudit={() => setMainScreen('intake')}
       />
     </div>
   );

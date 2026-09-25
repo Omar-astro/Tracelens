@@ -118,3 +118,35 @@ build/
 # DO NOT REMOVE ABOVE PATTERNS
 # Add project-specific patterns below
 # ============================================
+
+# Frontend build & dependencies
+frontend/node_modules/
+frontend/dist/
+dist/
+dist-ssr/
+*.local
+
+# Design exports and archive bundles
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+stitch_tracelens_ml_execution_tracer/
+stitch_tracelens_ml_execution_tracer.zip
+implementation-plan.md
+
+# Vite & build caches
+.vite/
+.eslintcache
+.parcel-cache/
+.turbo/
+
+# OS metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Scratch and internal system files
+scratch/
+.system_generated/

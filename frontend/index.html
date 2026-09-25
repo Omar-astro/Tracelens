@@ -1,0 +1,147 @@
+<!doctype html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TraceLens — AI-Powered DSAI Code Auditor</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet" />
+    <!-- Tailwind CSS Script & Config matching Stitch Design System -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-tertiary-fixed": "#23005c",
+              "secondary-fixed": "#6ffbbe",
+              "on-tertiary": "#3c0091",
+              "on-primary": "#00354a",
+              "primary": "#8ed5ff",
+              "secondary-fixed-dim": "#4edea3",
+              "surface-variant": "#31353c",
+              "background": "#10141a",
+              "on-secondary": "#003824",
+              "surface-dim": "#10141a",
+              "tertiary-fixed": "#e9ddff",
+              "outline": "#87929a",
+              "surface-container-low": "#181c22",
+              "on-primary-container": "#004965",
+              "surface-container-high": "#262a31",
+              "on-tertiary-container": "#520fbb",
+              "on-secondary-container": "#00311f",
+              "surface-container": "#1c2026",
+              "outline-variant": "#3e484f",
+              "surface-container-lowest": "#0a0e14",
+              "on-tertiary-fixed-variant": "#5516be",
+              "primary-fixed": "#c4e7ff",
+              "surface": "#10141a",
+              "on-error": "#690005",
+              "on-surface": "#dfe2eb",
+              "surface-container-highest": "#31353c",
+              "on-primary-fixed-variant": "#004c69",
+              "on-surface-variant": "#bdc8d1",
+              "secondary-container": "#00a572",
+              "inverse-on-surface": "#2d3137",
+              "primary-container": "#38bdf8",
+              "surface-tint": "#7bd0ff",
+              "tertiary": "#d5c3ff",
+              "inverse-primary": "#00668a",
+              "on-error-container": "#ffdad6",
+              "on-background": "#dfe2eb",
+              "error-container": "#93000a",
+              "surface-bright": "#353940",
+              "on-primary-fixed": "#001e2c",
+              "on-secondary-fixed-variant": "#005236",
+              "error": "#ffb4ab",
+              "inverse-surface": "#dfe2eb",
+              "primary-fixed-dim": "#7bd0ff",
+              "secondary": "#4edea3",
+              "on-secondary-fixed": "#002113",
+              "tertiary-container": "#bda2ff",
+              "tertiary-fixed-dim": "#d0bcff"
+            },
+            borderRadius: {
+              "DEFAULT": "0.125rem",
+              "lg": "0.25rem",
+              "xl": "0.5rem",
+              "full": "0.75rem"
+            },
+            spacing: {
+              "gutter-dense": "0.5rem",
+              "margin-dense": "0.5rem",
+              "space-xl": "1.5rem",
+              "space-lg": "1rem",
+              "gutter": "0.75rem",
+              "space-sm": "0.375rem",
+              "space-xs": "0.25rem",
+              "space-md": "0.75rem",
+              "margin": "1rem"
+            },
+            fontFamily: {
+              "body-md": ["Inter", "sans-serif"],
+              "label-xs": ["JetBrains Mono", "monospace"],
+              "headline-xl": ["Inter", "sans-serif"],
+              "label-md": ["JetBrains Mono", "monospace"],
+              "code-lg": ["JetBrains Mono", "monospace"],
+              "headline-lg": ["Inter", "sans-serif"],
+              "headline-sm": ["Inter", "sans-serif"],
+              "code-md": ["JetBrains Mono", "monospace"],
+              "body-sm": ["Inter", "sans-serif"],
+              "code-sm": ["JetBrains Mono", "monospace"]
+            },
+            fontSize: {
+              "body-md": ["13px", { lineHeight: "18px", fontWeight: "400" }],
+              "label-xs": ["10px", { lineHeight: "12px", letterSpacing: "0.05em", fontWeight: "500" }],
+              "headline-xl": ["24px", { lineHeight: "32px", letterSpacing: "-0.02em", fontWeight: "600" }],
+              "label-md": ["11px", { lineHeight: "14px", letterSpacing: "0.04em", fontWeight: "600" }],
+              "code-lg": ["13px", { lineHeight: "20px", fontWeight: "500" }],
+              "headline-lg": ["18px", { lineHeight: "24px", letterSpacing: "-0.015em", fontWeight: "600" }],
+              "headline-sm": ["14px", { lineHeight: "20px", letterSpacing: "-0.01em", fontWeight: "600" }],
+              "code-md": ["12px", { lineHeight: "18px", fontWeight: "400" }],
+              "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }],
+              "code-sm": ["11px", { lineHeight: "15px", fontWeight: "400" }]
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      @layer base {
+        html, body {
+          margin: 0;
+          padding: 0;
+          background-color: #10141a;
+          color: #dfe2eb;
+        }
+        body {
+          overscroll-behavior: none;
+        }
+      }
+      /* Custom sleek scrollbars */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0a0e14;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #31353c;
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #87929a;
+      }
+    </style>
+  </head>
+  <body class="bg-surface font-body-md text-body-md text-on-surface antialiased select-none">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

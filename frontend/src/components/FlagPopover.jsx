@@ -17,7 +17,7 @@ export default function FlagPopover({
       <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-surface-variant/30">
         <span className="px-1.5 py-0.5 rounded bg-error-container text-on-error-container font-label-xs text-[10px] font-bold font-mono flex items-center gap-1">
           <span className="material-symbols-outlined text-[12px]">crisis_alert</span>
-          {issue.title || 'HIGH SEVERITY: DATA LEAKAGE DETECTED'}
+          Line {lineNumber}: {issue.title || 'HIGH SEVERITY: DATA LEAKAGE DETECTED'}
         </span>
         <button
           type="button"

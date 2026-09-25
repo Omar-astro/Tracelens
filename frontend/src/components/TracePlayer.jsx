@@ -19,7 +19,7 @@ export default function TracePlayer({
   onRerunSandbox,
   selectedLineNumber,
   onSelectLine,
-  currentFileName
+  _currentFileName
 }) {
   const [explainingLine, setExplainingLine] = useState(null); // { lineNumber, codeLine }
   const [activeFlagPopover, setActiveFlagPopover] = useState(false);

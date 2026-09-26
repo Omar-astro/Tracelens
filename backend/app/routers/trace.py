@@ -12,7 +12,7 @@ Execution tracing pipeline:
 
 from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 try:
     from backend.app.services.ast_flow import build_flow_index
@@ -30,6 +30,10 @@ try:
         SafeInsertionPoint,
         find_safe_insertion_points,
     )
+    from backend.app.services.ml_diagnostics import (
+        MLAuditIssue,
+        run_ml_diagnostics,
+    )
 except ImportError:
     from app.services.ast_flow import build_flow_index
     from app.services.sandbox import (
@@ -45,6 +49,10 @@ except ImportError:
     from app.services.handoff_analyzer import (
         SafeInsertionPoint,
         find_safe_insertion_points,
+    )
+    from app.services.ml_diagnostics import (
+        MLAuditIssue,
+        run_ml_diagnostics,
     )
 
 router = APIRouter(prefix="/api", tags=["Trace"])
@@ -124,6 +132,14 @@ class TraceRequest(BaseModel):
 class TraceResponse(BaseModel):
     steps: List[TraceStep]
     safe_insertion_points: List[SafeInsertionPoint] = Field(default_factory=list)
+    ml_audit_issues: Optional[List[MLAuditIssue]] = Field(default=None)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler):
+        res = handler(self)
+        if self.ml_audit_issues is None:
+            res.pop("ml_audit_issues", None)
+        return res
 
     def __iter__(self):
         return iter(self.steps)
@@ -145,7 +161,11 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
     """Execute Python code in the sandbox, extract Safe Insertion Points, and return TraceResponse."""
     raw_code = payload.code
     if not isinstance(raw_code, str) or not raw_code.strip():
-        return TraceResponse(steps=[], safe_insertion_points=[])
+        return TraceResponse(
+            steps=[],
+            safe_insertion_points=[],
+            ml_audit_issues=[] if payload.mode == "model_lens" else None,
+        )
 
     # Strip and normalize incoming code
     code = raw_code.replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -216,9 +236,13 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
     # Compute safe insertion points across completed trace (Stage 9)
     safe_points = find_safe_insertion_points(res.steps, code)
 
-    # TODO(stage-13): Attach ml_audit_issues when mode == "model_lens"
+    # Stage 13: ModelLens Diagnostics Engine pass when mode == "model_lens"
+    ml_issues = None
+    if payload.mode == "model_lens":
+        ml_issues = run_ml_diagnostics(res.steps, code)
 
     return TraceResponse(
         steps=[TraceStep.model_validate(step) for step in res.steps],
         safe_insertion_points=safe_points,
+        ml_audit_issues=ml_issues,
     )

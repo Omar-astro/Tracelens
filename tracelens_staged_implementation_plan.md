@@ -54,7 +54,7 @@ Tick these off manually as each stage is verified complete.
 - [ ] Stage 10 — Frontend: Gutter Markers + Handoff Drawer
 - [x] Stage 11 — Backend: IBM Bob Client + `/api/explain-step`
 - [ ] Stage 12 — Frontend: Bob Explainer Pane
-- [ ] Stage 13 — Backend: ModelLens Diagnostics Engine
+- [x] Stage 13 — Backend: ModelLens Diagnostics Engine
 - [ ] Stage 14 — Frontend: ModelLens UI Overlay
 - [ ] Stage 15 — Polish, Demo Rehearsal, Deploy, Submission
 

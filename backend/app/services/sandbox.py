@@ -604,7 +604,10 @@ def run_in_sandbox(
 
 
 def main() -> int:
-    demo = "for i in range(4):\n    x = i * 2\n"
+    demo = """x = 10
+for i in [1, 2]:
+    if i == 2:
+        print("Bingo!")"""
     result = run_in_sandbox(demo, timeout=5.0)
     print(json.dumps(result.to_dict(), indent=2)[:1200])
     return 0 if result.ok else 1

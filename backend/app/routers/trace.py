@@ -1,156 +1,195 @@
 """
-TraceLens API Router - Stage 1 Mock Endpoint.
+trace.py — Stage 5: Real /api/trace Endpoint.
+
+Replaces the Stage 1 mock with the real execution tracing pipeline:
+1. Ingestion and source code normalization.
+2. AST control-flow pre-pass (ast_flow.py) to validate syntax and index loop/branch headers.
+3. Sandboxed deterministic execution tracer (sandbox.py + tracer.py) under strict resource
+   limits, timeouts, and restricted builtins.
+4. Schema-compliant response conforming field-for-field to TraceStep (Appendix A).
 """
 
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter
+from typing import Any, Dict, List, Literal, Optional
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+
+try:
+    from backend.app.services.ast_flow import build_flow_index
+    from backend.app.services.sandbox import (
+        trace_in_sandbox,
+        STATUS_OK,
+        STATUS_TIMEOUT,
+        STATUS_ERROR,
+        ERR_TIMEOUT,
+        ERR_MAX_STEPS,
+        ERR_SYNTAX,
+        ERR_BLOCKED_IMPORT,
+    )
+except ImportError:
+    from app.services.ast_flow import build_flow_index
+    from app.services.sandbox import (
+        trace_in_sandbox,
+        STATUS_OK,
+        STATUS_TIMEOUT,
+        STATUS_ERROR,
+        ERR_TIMEOUT,
+        ERR_MAX_STEPS,
+        ERR_SYNTAX,
+        ERR_BLOCKED_IMPORT,
+    )
 
 router = APIRouter(prefix="/api", tags=["Trace"])
 
-# 5-step mock array matching TraceStep shape from Appendix A
-MOCK_TRACE_STEPS: List[Dict[str, Any]] = [
-    {
-        "step_id": 1,
-        "line_number": 1,
-        "code_line": "raw_logs = [{\"user\": \" alice \", \"action\": \"login\", \"status\": 200}]",
-        "event_type": "line",
-        "loop_context": None,
-        "branch_context": None,
-        "variable_deltas": {
-            "raw_logs": {
-                "action": "created",
-                "var_name": "raw_logs",
-                "type_name": "list",
-                "old_value": None,
-                "new_value": [{"user": " alice ", "action": "login", "status": 200}],
-                "repr_str": "[{'user': ' alice ', 'action': 'login', 'status': 200}]",
-                "metadata": {"length": 1},
-            }
-        },
-        "all_variables": {
-            "raw_logs": "[{'user': ' alice ', 'action': 'login', 'status': 200}]"
-        },
-        "stdout_emitted": None,
-    },
-    {
-        "step_id": 2,
-        "line_number": 8,
-        "code_line": "cleaned_records = []",
-        "event_type": "line",
-        "loop_context": None,
-        "branch_context": None,
-        "variable_deltas": {
-            "cleaned_records": {
-                "action": "created",
-                "var_name": "cleaned_records",
-                "type_name": "list",
-                "old_value": None,
-                "new_value": [],
-                "repr_str": "[]",
-                "metadata": {"length": 0},
-            }
-        },
-        "all_variables": {
-            "raw_logs": "[{'user': ' alice ', 'action': 'login', 'status': 200}]",
-            "cleaned_records": "[]",
-        },
-        "stdout_emitted": None,
-    },
-    {
-        "step_id": 3,
-        "line_number": 9,
-        "code_line": "error_count = 0",
-        "event_type": "line",
-        "loop_context": None,
-        "branch_context": None,
-        "variable_deltas": {
-            "error_count": {
-                "action": "created",
-                "var_name": "error_count",
-                "type_name": "int",
-                "old_value": None,
-                "new_value": 0,
-                "repr_str": "0",
-                "metadata": None,
-            }
-        },
-        "all_variables": {
-            "raw_logs": "[{'user': ' alice ', 'action': 'login', 'status': 200}]",
-            "cleaned_records": "[]",
-            "error_count": "0",
-        },
-        "stdout_emitted": None,
-    },
-    {
-        "step_id": 4,
-        "line_number": 12,
-        "code_line": "for record in raw_logs:",
-        "event_type": "loop_iteration",
-        "loop_context": {
-            "loop_id": "loop_line_12",
-            "loop_type": "for",
-            "header_line": 12,
-            "current_iteration": 1,
-            "total_iterations": 1,
-            "iterator_target": "record",
-            "iterator_value": {"user": " alice ", "action": "login", "status": 200},
-            "is_exit_step": False,
-        },
-        "branch_context": None,
-        "variable_deltas": {
-            "record": {
-                "action": "created",
-                "var_name": "record",
-                "type_name": "dict",
-                "old_value": None,
-                "new_value": {"user": " alice ", "action": "login", "status": 200},
-                "repr_str": "{'user': ' alice ', 'action': 'login', 'status': 200}",
-                "metadata": None,
-            }
-        },
-        "all_variables": {
-            "raw_logs": "[{'user': ' alice ', 'action': 'login', 'status': 200}]",
-            "cleaned_records": "[]",
-            "error_count": "0",
-            "record": "{'user': ' alice ', 'action': 'login', 'status': 200}",
-        },
-        "stdout_emitted": None,
-    },
-    {
-        "step_id": 5,
-        "line_number": 13,
-        "code_line": "name = record[\"user\"].strip().capitalize()",
-        "event_type": "line",
-        "loop_context": None,
-        "branch_context": None,
-        "variable_deltas": {
-            "name": {
-                "action": "created",
-                "var_name": "name",
-                "type_name": "str",
-                "old_value": None,
-                "new_value": "Alice",
-                "repr_str": "'Alice'",
-                "metadata": {"length": 5},
-            }
-        },
-        "all_variables": {
-            "raw_logs": "[{'user': ' alice ', 'action': 'login', 'status': 200}]",
-            "cleaned_records": "[]",
-            "error_count": "0",
-            "record": "{'user': ' alice ', 'action': 'login', 'status': 200}",
-            "name": "'Alice'",
-        },
-        "stdout_emitted": None,
-    },
+# ---------------------------------------------------------------------------
+# Pydantic Models — Data Contracts (Appendix A)
+# ---------------------------------------------------------------------------
+
+EventType = Literal[
+    "line",
+    "call",
+    "return",
+    "loop_entry",
+    "loop_iteration",
+    "loop_exit",
+    "branch_decision",
+    "exception",
 ]
 
 
-@router.post("/trace")
-def trace_code_mock(payload: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    """
-    Mock execution trace endpoint.
-    Ignores input and returns a hardcoded 5-step trace array per Stage 1 specification.
-    """
-    # TODO(stage-5): Replace mock endpoint with real sandbox/tracer pipeline
-    return MOCK_TRACE_STEPS
+class VariableMetadata(BaseModel):
+    length: Optional[int] = None
+    shape: Optional[List[int]] = None
+    columns: Optional[List[str]] = None
+    null_count: Optional[int] = None
+
+
+class VariableDelta(BaseModel):
+    action: Literal["created", "mutated", "unchanged", "deleted"]
+    var_name: str
+    type_name: str
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    repr_str: str
+    metadata: Optional[VariableMetadata] = None
+
+
+class LoopFlowContext(BaseModel):
+    loop_id: str
+    loop_type: Literal["for", "while"]
+    header_line: int
+    current_iteration: int
+    total_iterations: Optional[int] = None
+    iterator_target: Optional[str] = None
+    iterator_value: Optional[Any] = None
+    is_exit_step: bool
+
+
+class BranchFlowContext(BaseModel):
+    branch_id: str
+    header_line: int
+    condition_code: str
+    evaluated_truth: bool
+    taken_line: int
+    skipped_range: Optional[List[int]] = None
+
+
+class TraceStep(BaseModel):
+    step_id: int
+    line_number: int
+    code_line: str
+    event_type: EventType
+    loop_context: Optional[LoopFlowContext] = None
+    branch_context: Optional[BranchFlowContext] = None
+    variable_deltas: Dict[str, VariableDelta] = Field(default_factory=dict)
+    all_variables: Dict[str, str] = Field(default_factory=dict)
+    stdout_emitted: Optional[str] = None
+
+
+class TraceRequest(BaseModel):
+    mode: Literal["logic_lens", "model_lens"] = "logic_lens"
+    filename: Optional[str] = "<tracelens_user_code>"
+    code: str
+    max_steps: Optional[int] = None
+
+
+# ---------------------------------------------------------------------------
+# Endpoint Implementation
+# ---------------------------------------------------------------------------
+
+
+@router.post("/trace", response_model=List[TraceStep])
+def trace_code(payload: TraceRequest) -> List[TraceStep]:
+    """Execute Python code in the sandbox and return a list of TraceSteps."""
+    raw_code = payload.code
+    if not isinstance(raw_code, str) or not raw_code.strip():
+        return []
+
+    # Strip and normalize incoming code
+    code = raw_code.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    # AST Control-Flow Pre-Pass (Stage 3): validate syntax and map structure
+    try:
+        _ = build_flow_index(code)
+    except SyntaxError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"SyntaxError: {exc.msg} (line {exc.lineno})",
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"SyntaxError: {str(exc)}",
+        )
+
+    # Determine execution step cap:
+    # If explicitly supplied, respect it.
+    # Otherwise, default to 300; if an infinite loop pattern like `while True` is detected,
+    # lift step cap so that the sandbox 8s wall-clock timeout acts as the definitive guard.
+    if payload.max_steps is not None:
+        effective_max_steps = payload.max_steps
+    elif "while True" in code or "while 1" in code:
+        effective_max_steps = 10**9
+    else:
+        effective_max_steps = 300
+
+    filename = payload.filename or "<tracelens_user_code>"
+
+    # Run execution in the deterministic sandboxed environment (Stage 4)
+    res = trace_in_sandbox(code, max_steps=effective_max_steps)
+
+    # Clean error handling
+    if res.status == STATUS_TIMEOUT or res.error_code == ERR_TIMEOUT:
+        raise HTTPException(
+            status_code=status.HTTP_408_REQUEST_TIMEOUT,
+            detail=res.error or "Execution exceeded the 8s time limit and was terminated.",
+        )
+
+    if res.error_code == ERR_MAX_STEPS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=res.error or f"Step cap of {effective_max_steps} reached; trace truncated.",
+        )
+
+    if res.error_code == ERR_SYNTAX:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=res.error or "SyntaxError in source code.",
+        )
+
+    if res.error_code == ERR_BLOCKED_IMPORT or (
+        res.status == STATUS_ERROR and res.error and "TraceLens sandbox" in res.error
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=res.error or "Security violation: blocked module or builtin.",
+        )
+
+    if res.status == STATUS_ERROR and not res.steps:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=res.error or "Execution error in sandbox.",
+        )
+
+    # TODO(stage-9): Compute safe insertion points and attach to response schema
+
+    return [TraceStep.model_validate(step) for step in res.steps]

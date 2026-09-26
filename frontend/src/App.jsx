@@ -1,32 +1,92 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import ModeSelector from './components/ModeSelector';
 import CodeInputPane from './components/CodeInputPane';
+import TracePlayer from './components/TracePlayer';
 
 /**
- * TraceLens App — Stage 6: Frontend↔Backend Tunnel.
+ * TraceLens App — Stage 7: Studio Shell + Playback Scrubber.
  *
- * Lifts traceSteps and sourceCode state to App level so Stage 7
- * (Studio Shell) can render them without re-fetching.
+ * State machine:
+ *   'intake'  — show ModeSelector + CodeInputPane
+ *   'studio'  — show TracePlayer (4-pane Studio layout) driven by real trace data
  */
 export default function App() {
   const [mode, setMode] = useState('logic_lens');
+  const [view, setView] = useState('intake'); // 'intake' | 'studio'
 
-  // Stage 6: lifted trace state (populated by CodeInputPane via onTraceComplete)
-  // TODO(stage-7): use _traceSteps + _sourceCode to render the Studio workspace
-  const [_traceSteps, setTraceSteps] = useState(null);   // TraceStep[] | null
-  const [_sourceCode, setSourceCode] = useState('');     // last traced source
+  // Trace state lifted from CodeInputPane via onTraceComplete
+  const [traceSteps, setTraceSteps] = useState(null);   // TraceStep[] | null
+  const [sourceCode, setSourceCode] = useState('');     // last traced source
 
-  const handleTraceComplete = (steps, code) => {
+  // Playback state lives here so it persists when navigating back to intake
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+
+  const handleTraceComplete = useCallback((steps, code) => {
     setTraceSteps(steps);
     setSourceCode(code);
-  };
+    setCurrentStepIndex(0);
+    setIsPlaying(false);
+    setView('studio');
+  }, []);
 
+  const handleBackToIntake = useCallback(() => {
+    setIsPlaying(false);
+    setView('intake');
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Studio view
+  // -------------------------------------------------------------------------
+  if (view === 'studio' && traceSteps && traceSteps.length > 0) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+        {/* Studio Header Bar */}
+        <header className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleBackToIntake}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-100 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+            >
+              ← Back
+            </button>
+            <span className="text-xs font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full">
+              TraceLens Studio
+            </span>
+            <span className="text-xs text-slate-500 font-mono hidden sm:inline">
+              Mode: {mode === 'logic_lens' ? 'LogicLens' : 'ModelLens'}
+            </span>
+          </div>
+          <span className="text-xs text-slate-600 font-mono">
+            {traceSteps.length} steps
+          </span>
+        </header>
+
+        <TracePlayer
+          code={sourceCode}
+          traceSteps={traceSteps}
+          currentStepIndex={currentStepIndex}
+          onSelectStepIndex={setCurrentStepIndex}
+          isPlaying={isPlaying}
+          onTogglePlay={setIsPlaying}
+          playbackSpeed={playbackSpeed}
+          onChangePlaybackSpeed={setPlaybackSpeed}
+        />
+      </main>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Intake view (default)
+  // -------------------------------------------------------------------------
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center py-10 px-4 sm:px-6 font-sans">
       {/* Brand Header */}
       <header className="max-w-4xl w-full text-center mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-mono mb-4">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
           TraceLens — Runtime Flow &amp; Auditor
         </div>
 
@@ -42,14 +102,11 @@ export default function App() {
       {/* Mode Selector */}
       <ModeSelector mode={mode} onChange={setMode} />
 
-      {/* Code Input Pane — Stage 6: wired to real backend */}
+      {/* Code Input Pane — wired to real backend */}
       <CodeInputPane mode={mode} onTraceComplete={handleTraceComplete} />
 
-      {/* TODO(stage-7): render Studio workspace when traceSteps is set */}
-
-      {/* Footer info */}
       <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 6 Tunnel Active
+        TraceLens • Stage 7 Studio Shell Active
       </footer>
     </main>
   );

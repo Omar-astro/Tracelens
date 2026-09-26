@@ -1,106 +1,402 @@
-import React, { useState } from 'react';
-import TimelineScrubber from './TimelineScrubber';
-import CodeAuditor from './CodeAuditor';
-import DataModelInspector from './DataModelInspector';
-import BobAiAuditPanel from './BobAiAuditPanel';
-import LineExplainPanel from './LineExplainPanel';
-import FlagPopover from './FlagPopover';
+import React, { useEffect, useRef, useCallback } from 'react';
+import CodeViewer from './CodeViewer';
 
+/**
+ * TracePlayer — Stage 7: Studio Shell + Playback Scrubber.
+ *
+ * 4-pane responsive layout:
+ *   Left  (~40%)  : CodeViewer — read-only source with active-line highlight
+ *   Center (~35%) : Visualizer canvas — placeholder (Stage 8)
+ *   Right (~25%)  : Handoff / intent drawer — placeholder (Stage 10)
+ *
+ * Playback state: currentStepIndex, isPlaying, playbackSpeed (0.5x / 1x / 2x)
+ * Controls: step forward, step backward, play/pause, jump to start/end, free-scrub range slider
+ */
 export default function TracePlayer({
   code,
   traceSteps,
   currentStepIndex,
-  onSelectStep,
+  onSelectStepIndex,
   isPlaying,
   onTogglePlay,
-  hasLeakage,
-  isRemediated,
-  onApplyFix,
-  onRerunSandbox,
-  selectedLineNumber,
-  onSelectLine,
-  _currentFileName
+  playbackSpeed,
+  onChangePlaybackSpeed,
 }) {
-  const [explainingLine, setExplainingLine] = useState(null); // { lineNumber, codeLine }
-  const [activeFlagPopover, setActiveFlagPopover] = useState(false);
+  const totalSteps = traceSteps.length;
+  const currentStep = traceSteps[currentStepIndex] ?? traceSteps[0];
 
-  const currentStep = traceSteps[currentStepIndex] || traceSteps[0];
+  // ---------------------------------------------------------------------------
+  // Auto-play timer
+  // ---------------------------------------------------------------------------
+  const intervalRef = useRef(null);
 
-  const handleExplainLine = (lineNumber, codeLine) => {
-    setExplainingLine({ lineNumber, codeLine });
+  const stopPlay = useCallback(() => {
+    onTogglePlay(false);
+  }, [onTogglePlay]);
+
+  useEffect(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (!isPlaying) return;
+
+    const delay = Math.round(900 / playbackSpeed);
+    intervalRef.current = setInterval(() => {
+      onSelectStepIndex((prev) => {
+        const next = prev + 1;
+        if (next >= totalSteps) {
+          // Stop cleanly at last step
+          stopPlay();
+          return totalSteps - 1;
+        }
+        return next;
+      });
+    }, delay);
+
+    return () => {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [isPlaying, playbackSpeed, totalSteps, onSelectStepIndex, stopPlay]);
+
+  // ---------------------------------------------------------------------------
+  // Navigation helpers
+  // ---------------------------------------------------------------------------
+  const handleStepBack = () => {
+    if (currentStepIndex > 0) onSelectStepIndex(currentStepIndex - 1);
   };
 
+  const handleStepForward = () => {
+    if (currentStepIndex < totalSteps - 1) onSelectStepIndex(currentStepIndex + 1);
+  };
+
+  const handleScrub = (e) => {
+    const idx = Number(e.target.value);
+    onSelectStepIndex(idx);
+  };
+
+  // Stage 7: Jump to loop start
+  const handleJumpToLoopStart = () => {
+    const currentLoopId = currentStep?.loop_context?.loop_id;
+    if (currentLoopId) {
+      for (let i = 0; i < totalSteps; i++) {
+        if (traceSteps[i]?.loop_context?.loop_id === currentLoopId) {
+          if (i !== currentStepIndex) {
+            onSelectStepIndex(i);
+            return;
+          }
+          break;
+        }
+      }
+    }
+    // Search backward for previous loop
+    for (let i = currentStepIndex - 1; i >= 0; i--) {
+      if (traceSteps[i]?.loop_context?.loop_id) {
+        const id = traceSteps[i].loop_context.loop_id;
+        for (let j = 0; j <= i; j++) {
+          if (traceSteps[j]?.loop_context?.loop_id === id) {
+            onSelectStepIndex(j);
+            return;
+          }
+        }
+      }
+    }
+    // Search forward for next loop start
+    for (let i = currentStepIndex + 1; i < totalSteps; i++) {
+      if (traceSteps[i]?.loop_context?.loop_id) {
+        onSelectStepIndex(i);
+        return;
+      }
+    }
+  };
+
+  // Stage 7: Jump to loop end
+  const handleJumpToLoopEnd = () => {
+    const currentLoopId = currentStep?.loop_context?.loop_id;
+    if (currentLoopId) {
+      let lastMatch = -1;
+      for (let i = currentStepIndex; i < totalSteps; i++) {
+        if (traceSteps[i]?.loop_context?.loop_id === currentLoopId) {
+          lastMatch = i;
+          if (traceSteps[i]?.loop_context?.is_exit_step) {
+            onSelectStepIndex(i);
+            return;
+          }
+        }
+      }
+      if (lastMatch !== -1 && lastMatch !== currentStepIndex) {
+        onSelectStepIndex(lastMatch);
+        return;
+      }
+    }
+    // Search forward for next loop end
+    for (let i = currentStepIndex + 1; i < totalSteps; i++) {
+      if (traceSteps[i]?.loop_context?.loop_id) {
+        const id = traceSteps[i].loop_context.loop_id;
+        let lastMatch = i;
+        for (let j = i; j < totalSteps; j++) {
+          if (traceSteps[j]?.loop_context?.loop_id === id) {
+            lastMatch = j;
+            if (traceSteps[j]?.loop_context?.is_exit_step) {
+              onSelectStepIndex(j);
+              return;
+            }
+          }
+        }
+        if (lastMatch !== -1) {
+          onSelectStepIndex(lastMatch);
+          return;
+        }
+      }
+    }
+  };
+
+  const hasAnyLoops = traceSteps.some((s) => !!s.loop_context);
+
+  const progressPct = (((currentStepIndex + 1) / totalSteps) * 100).toFixed(1);
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
-    <div className="flex flex-col w-full">
-      {/* 1. Execution Timeline Scrubber Dock */}
-      <TimelineScrubber
-        steps={traceSteps}
-        currentStepIndex={currentStepIndex}
-        onSelectStep={onSelectStep}
-        isPlaying={isPlaying}
-        onTogglePlay={onTogglePlay}
-        hasLeakage={hasLeakage}
-      />
+    <div className="flex flex-col w-full flex-1 overflow-hidden min-h-0">
+      {/* ── Playback Controls Dock ─────────────────────────────────────────── */}
+      <section className="shrink-0 bg-slate-900 border-b border-slate-800 px-4 py-2.5">
+        {/* Row 1: Buttons + speed + step counter */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Primary Stepper Dock */}
+            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-lg p-0.5 shadow-sm">
+              {/* Jump to start */}
+              <button
+                type="button"
+                onClick={() => onSelectStepIndex(0)}
+                disabled={currentStepIndex === 0}
+                className="p-1.5 disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
+                title="Jump to Start"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
+                </svg>
+              </button>
 
-      {/* 2. Main Multi-Pane Workspace */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-gutter p-gutter">
-        {/* LEFT PANE: Code & Cell Inspector (col-span-7) */}
-        <div className="lg:col-span-7 relative flex flex-col gap-2">
-          <CodeAuditor
-            code={code}
-            currentStep={currentStep}
-            hasLeakage={hasLeakage}
-            selectedLineNumber={selectedLineNumber}
-            onSelectLine={onSelectLine}
-            onExplainLine={handleExplainLine}
-            onOpenRemediationDiff={() => {
-              const el = document.getElementById('remediation-diff-card');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
-          />
+              {/* Step Backward */}
+              <button
+                type="button"
+                onClick={handleStepBack}
+                disabled={currentStepIndex === 0}
+                className="p-1.5 disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
+                title="Step Backward (Left Arrow)"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 18V6h2v5.5l8.5-5.5V18L8 12.5V18z" />
+                </svg>
+              </button>
 
-          {/* Gutter Flag Popover if triggered */}
-          {activeFlagPopover && currentStep?.issue && (
-            <FlagPopover
-              issue={currentStep.issue}
-              lineNumber={currentStep.lineNumber}
-              onExplainWithBob={() => handleExplainLine(currentStep.lineNumber, currentStep.codeLine)}
-              onOpenRemediationDiff={() => {
-                const el = document.getElementById('remediation-diff-card');
-                if (el) el.scrollIntoView({ behavior: 'smooth' });
-                setActiveFlagPopover(false);
-              }}
-              onDismiss={() => setActiveFlagPopover(false)}
-            />
-          )}
+              {/* Play / Pause */}
+              <button
+                type="button"
+                onClick={() => onTogglePlay(!isPlaying)}
+                className="px-2.5 py-1 text-cyan-400 hover:text-cyan-300 transition-colors rounded hover:bg-slate-700/60 flex items-center gap-1 font-semibold text-xs"
+                title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+              >
+                {isPlaying ? (
+                  <>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M6 19h4V5H6zm8-14v14h4V5z" />
+                    </svg>
+                    <span>Pause</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    <span>Play</span>
+                  </>
+                )}
+              </button>
 
-          {/* Inline / Docked Line Explanation Panel */}
-          {explainingLine && (
-            <LineExplainPanel
-              lineNumber={explainingLine.lineNumber}
-              codeLine={explainingLine.codeLine}
-              currentStep={currentStep}
-              onClose={() => setExplainingLine(null)}
-              onApplyFix={hasLeakage ? onApplyFix : null}
-            />
-          )}
+              {/* Step Forward */}
+              <button
+                type="button"
+                onClick={handleStepForward}
+                disabled={currentStepIndex === totalSteps - 1}
+                className="p-1.5 disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
+                title="Step Forward (Right Arrow)"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18 18V6h-2v5.5L7.5 6v12L16 12.5V18z" />
+                </svg>
+              </button>
+
+              {/* Jump to end */}
+              <button
+                type="button"
+                onClick={() => onSelectStepIndex(totalSteps - 1)}
+                disabled={currentStepIndex === totalSteps - 1}
+                className="p-1.5 disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
+                title="Jump to End"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M16 6h2v12h-2zm-2.5 6L5 6v12z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Loop Stepper Dock */}
+            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-lg p-0.5">
+              <button
+                type="button"
+                onClick={handleJumpToLoopStart}
+                disabled={!hasAnyLoops}
+                className="px-2 py-1 flex items-center gap-1 text-xs font-mono disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
+                title="Jump to Loop Start"
+              >
+                <span className="text-cyan-400 font-bold">⟲</span>
+                <span>Loop Start</span>
+              </button>
+              <div className="h-3.5 w-px bg-slate-700" />
+              <button
+                type="button"
+                onClick={handleJumpToLoopEnd}
+                disabled={!hasAnyLoops}
+                className="px-2 py-1 flex items-center gap-1 text-xs font-mono disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
+                title="Jump to Loop End"
+              >
+                <span>Loop End</span>
+                <span className="text-cyan-400 font-bold">⟳</span>
+              </button>
+            </div>
+
+            {/* Speed toggle */}
+            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-lg p-0.5 text-xs font-mono">
+              {[0.5, 1, 2].map((speed) => (
+                <button
+                  key={speed}
+                  type="button"
+                  onClick={() => onChangePlaybackSpeed(speed)}
+                  className={`px-2 py-0.5 rounded transition-colors ${
+                    playbackSpeed === speed
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-700/50'
+                  }`}
+                >
+                  {speed}x
+                </button>
+              ))}
+            </div>
+
+            {/* Step counter */}
+            <span className="text-xs font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 rounded-lg font-semibold">
+              Step {currentStepIndex + 1} of {totalSteps}
+            </span>
+
+            {/* Active loop tag if inside loop */}
+            {currentStep?.loop_context && (
+              <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm">
+                <span className="text-emerald-400 font-bold">⟳</span>
+                <span>{currentStep.loop_context.loop_type || 'loop'}: iter {currentStep.loop_context.current_iteration ?? '?'}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Right: Progress % and Line metadata */}
+          <div className="flex items-center gap-3 text-xs font-mono">
+            {currentStep && (
+              <span className="text-slate-400 bg-slate-800/50 px-2.5 py-1 rounded border border-slate-700/40 hidden md:inline">
+                Line <span className="text-slate-200 font-bold">{currentStep.line_number}</span>
+                {' · '}
+                <span className="text-cyan-400">{currentStep.event_type}</span>
+              </span>
+            )}
+            <div className="flex items-center gap-1.5 bg-slate-800/50 px-2.5 py-1 rounded border border-slate-700/40">
+              <span className="text-slate-500">PROGRESS:</span>
+              <span className="text-cyan-400 font-bold">{progressPct}%</span>
+            </div>
+          </div>
         </div>
 
-        {/* RIGHT PANE: Visual State & AI Diagnostic Panel (col-span-5) */}
-        <div className="lg:col-span-5 flex flex-col gap-gutter">
-          <DataModelInspector
-            currentStep={currentStep}
-            isRemediated={isRemediated}
+        {/* Row 2: Custom Sleek Timeline Scrubber Track */}
+        <div className="relative w-full py-1.5 flex items-center group">
+          {/* Visual Track */}
+          <div
+            className="relative w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50 cursor-pointer shadow-inner"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const pct = Math.max(0, Math.min(1, clickX / rect.width));
+              onSelectStepIndex(Math.round(pct * (totalSteps - 1)));
+            }}
+          >
+            {/* Active gradient fill */}
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 rounded-full transition-all duration-100 shadow-[0_0_10px_rgba(6,182,212,0.5)]"
+              style={{ width: `${Math.max(1, Math.min(100, ((currentStepIndex + 1) / totalSteps) * 100))}%` }}
+            />
+          </div>
+
+          {/* Interactive thumb marker */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-cyan-400 border-2 border-slate-950 shadow-[0_0_8px_#22d3ee] pointer-events-none transition-all duration-100"
+            style={{ left: `${Math.max(1, Math.min(99, ((currentStepIndex + 1) / totalSteps) * 100))}%` }}
           />
 
-          <BobAiAuditPanel
-            hasLeakage={hasLeakage}
-            onApplyFix={onApplyFix}
-            onRerunSandbox={onRerunSandbox}
-            isRemediated={isRemediated}
+          {/* Full overlay invisible range input for native dragging, accessibility & touch */}
+          <input
+            type="range"
+            min={0}
+            max={totalSteps - 1}
+            value={currentStepIndex}
+            onChange={handleScrub}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            aria-label="Scrub through trace steps"
           />
         </div>
       </section>
+
+      {/* ── 4-Pane Responsive Workspace ──────────────────────────────────── */}
+      <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden min-h-0">
+        {/* LEFT (~40%): Code Viewer */}
+        <div className="w-full lg:w-[40%] min-h-[320px] lg:min-h-0 min-w-[280px] flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-hidden">
+          <CodeViewer
+            code={code}
+            currentStep={currentStep}
+          />
+        </div>
+
+        {/* CENTER (~35%): Visualizer canvas — placeholder for Stage 8 */}
+        <div className="w-full lg:w-[35%] min-h-[220px] lg:min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-auto p-4 bg-slate-950/50">
+          {/* TODO(stage-8): render LoopVisualizer / BranchVisualizer / StateBoard here */}
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-600">
+            <svg className="w-10 h-10 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M8 12h8M12 8v8" />
+            </svg>
+            <p className="text-xs font-mono text-center">
+              Visualizer Canvas<br />
+              <span className="text-slate-700">(Stage 8: Loop / Branch / State)</span>
+            </p>
+          </div>
+        </div>
+
+        {/* RIGHT (~25%): Handoff / intent drawer — placeholder for Stage 10 */}
+        <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[180px] flex flex-col overflow-auto p-4 bg-slate-950/30">
+          {/* TODO(stage-10): render HandoffDrawer here */}
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-600">
+            <svg className="w-8 h-8 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <p className="text-xs font-mono text-center">
+              Handoff Drawer<br />
+              <span className="text-slate-700">(Stage 10)</span>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -108,12 +108,13 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete }) 
     setTraceSteps(null);
 
     try {
-      const steps = await postTrace(code, mode);
+      const response = await postTrace(code, mode);
+      // Backend returns { steps: TraceStep[], safe_insertion_points: [...] }
+      const steps = Array.isArray(response) ? response : (response.steps ?? []);
       setTraceSteps(steps);
       if (onTraceComplete) {
         onTraceComplete(steps, code);
       }
-      // TODO(stage-7): transition to Studio workspace layout
       console.log('Trace complete —', steps.length, 'steps received:', steps);
     } catch (err) {
       const message =

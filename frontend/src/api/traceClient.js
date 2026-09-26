@@ -55,7 +55,7 @@ export async function postTrace(code, mode = "logic_lens", maxSteps = undefined)
     // fetch() itself threw — network down, CORS preflight failure, etc.
     throw new TraceApiError(
       `Network error: could not reach the TraceLens backend (${API_BASE_URL}). ` +
-        "Make sure the backend is running.",
+      "Make sure the backend is running.",
       null
     );
   }
@@ -74,5 +74,15 @@ export async function postTrace(code, mode = "logic_lens", maxSteps = undefined)
     throw new TraceApiError(detail, response.status);
   }
 
-  return response.json();
+  const data = await response.json();
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (data && Array.isArray(data.steps)) {
+    const steps = data.steps;
+    steps.safe_insertion_points = data.safe_insertion_points || [];
+    steps.rawResponse = data;
+    return steps;
+  }
+  return data;
 }

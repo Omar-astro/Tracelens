@@ -52,7 +52,7 @@ Tick these off manually as each stage is verified complete.
 - [ ] Stage 8 — Frontend: Manual Visualizers (Loop / Branch / State)
 - [ ] Stage 9 — Backend: Safe Insertion Analyzer
 - [ ] Stage 10 — Frontend: Gutter Markers + Handoff Drawer
-- [ ] Stage 11 — Backend: IBM Bob Client + `/api/explain-step`
+- [x] Stage 11 — Backend: IBM Bob Client + `/api/explain-step`
 - [ ] Stage 12 — Frontend: Bob Explainer Pane
 - [ ] Stage 13 — Backend: ModelLens Diagnostics Engine
 - [ ] Stage 14 — Frontend: ModelLens UI Overlay

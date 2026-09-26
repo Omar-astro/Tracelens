@@ -5,6 +5,7 @@ TraceLens Backend Application - Stage 1 Scaffold.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers.trace import router as trace_router
+from .routers.explain import router as explain_router
 
 app = FastAPI(
     title="TraceLens API",
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(trace_router)
+app.include_router(explain_router)
 
 
 @app.get("/health")

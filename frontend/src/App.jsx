@@ -141,7 +141,7 @@ export default function App() {
       <CodeInputPane mode={mode} onTraceComplete={handleTraceComplete} />
 
       <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 10 Gutter Markers &amp; Handoff Drawer Active
+        TraceLens • Stage 12 Bob Explainer Pane Active
       </footer>
     </main>
   );

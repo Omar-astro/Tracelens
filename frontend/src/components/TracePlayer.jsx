@@ -4,6 +4,7 @@ import LoopVisualizer from './LoopVisualizer';
 import BranchVisualizer from './BranchVisualizer';
 import StateBoard from './StateBoard';
 import HandoffDrawer from './HandoffDrawer';
+import BobExplainerPane from './BobExplainerPane';
 
 /**
  * TracePlayer — Stage 7: Studio Shell + Playback Scrubber.
@@ -29,6 +30,13 @@ export default function TracePlayer({
 }) {
   // Stage 10: tracks which SafeInsertionPoint the user clicked in the gutter
   const [selectedSafePoint, setSelectedSafePoint] = useState(null);
+  // Stage 12: Drawer tab view ('explainer' | 'hooks' | 'split')
+  const [drawerTab, setDrawerTab] = useState('explainer');
+
+  const handleGutterMarkerClick = useCallback((point) => {
+    setSelectedSafePoint(point);
+    setDrawerTab('hooks');
+  }, []);
   const totalSteps = traceSteps.length;
   const currentStep = traceSteps[currentStepIndex] ?? traceSteps[0];
 
@@ -373,7 +381,7 @@ export default function TracePlayer({
             skippedRange={currentStep?.branch_context?.skipped_range ?? null}
             safeInsertionPoints={safeInsertionPoints}
             selectedSafePoint={selectedSafePoint}
-            onGutterMarkerClick={setSelectedSafePoint}
+            onGutterMarkerClick={handleGutterMarkerClick}
           />
         </div>
 
@@ -399,13 +407,105 @@ export default function TracePlayer({
           <StateBoard currentStep={currentStep} />
         </div>
 
-        {/* RIGHT (~25%): Stage 10 — HandoffDrawer with gutter safe-hook detail */}
-        <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[180px] flex flex-col overflow-hidden border-l border-slate-800 bg-slate-950/30">
-          <HandoffDrawer
-            selectedPoint={selectedSafePoint}
-            safeInsertionPoints={safeInsertionPoints}
-            onSelectPoint={setSelectedSafePoint}
-          />
+        {/* RIGHT (~25%): Stage 10 & 12 — Drawer with Bob Explainer & Handoff Drawer */}
+        <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[240px] flex flex-col overflow-hidden border-l border-slate-800 bg-slate-950/30">
+          {/* Drawer View Navigation Tabs */}
+          <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800">
+            <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => setDrawerTab('explainer')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                  drawerTab === 'explainer'
+                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="IBM Bob Line-by-Line Contextual Intent Explainer"
+              >
+                <span>⚡</span>
+                <span>Bob Explainer</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDrawerTab('hooks')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                  drawerTab === 'hooks'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Stage 10 Safe Insertion Hooks"
+              >
+                <span className="text-amber-400 font-bold leading-none">★</span>
+                <span>Safe Hooks</span>
+                {safeInsertionPoints.length > 0 && (
+                  <span className={`px-1 py-0.2 rounded text-[9px] ${
+                    drawerTab === 'hooks' ? 'bg-slate-950 text-amber-300' : 'bg-slate-900/80 text-slate-300'
+                  }`}>
+                    {safeInsertionPoints.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDrawerTab('split')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                  drawerTab === 'split'
+                    ? 'bg-indigo-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Stacked View: Bob Explainer and Safe Hooks"
+              >
+                Split
+              </button>
+            </div>
+          </div>
+
+          {/* Drawer Content */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {drawerTab === 'explainer' && (
+              <BobExplainerPane
+                currentStep={currentStep}
+                currentStepIndex={currentStepIndex}
+                safeInsertionPoints={safeInsertionPoints}
+                onSelectSafePoint={(pt) => {
+                  setSelectedSafePoint(pt);
+                  setDrawerTab('hooks');
+                }}
+              />
+            )}
+
+            {drawerTab === 'hooks' && (
+              <HandoffDrawer
+                selectedPoint={selectedSafePoint}
+                safeInsertionPoints={safeInsertionPoints}
+                onSelectPoint={setSelectedSafePoint}
+              />
+            )}
+
+            {drawerTab === 'split' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="h-1/2 min-h-[160px] border-b border-slate-800 overflow-hidden flex flex-col">
+                  <BobExplainerPane
+                    currentStep={currentStep}
+                    currentStepIndex={currentStepIndex}
+                    safeInsertionPoints={safeInsertionPoints}
+                    onSelectSafePoint={(pt) => {
+                      setSelectedSafePoint(pt);
+                    }}
+                  />
+                </div>
+                <div className="h-1/2 min-h-[160px] overflow-hidden flex flex-col">
+                  <HandoffDrawer
+                    selectedPoint={selectedSafePoint}
+                    safeInsertionPoints={safeInsertionPoints}
+                    onSelectPoint={setSelectedSafePoint}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

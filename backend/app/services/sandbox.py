@@ -59,6 +59,7 @@ BLOCKED_NAMES = frozenset({"os", "sys", "subprocess", "socket"})
 BLOCKED_BUILTINS = frozenset({"open"})
 
 DEFAULT_TRACER_REF = f"{__name__}:builtin_line_tracer"
+SANDBOXED_TRACER_REF = "backend.app.services.tracer:build_tracer"
 
 #: How often the child checkpoints its partial trace to disk. A run killed at
 #: the wall-clock timeout never reaches its final write, so without this an
@@ -202,7 +203,16 @@ def _resolve_tracer(tracer_ref: str) -> TracerFactory:
     module_name, sep, attr = tracer_ref.partition(":")
     if not sep or not module_name or not attr:
         raise ValueError(f"Invalid tracer ref {tracer_ref!r}; expected 'module.path:callable'")
-    factory = getattr(importlib.import_module(module_name), attr)
+    try:
+        mod = importlib.import_module(module_name)
+    except ModuleNotFoundError:
+        if module_name.startswith("backend."):
+            mod = importlib.import_module(module_name[len("backend."):])
+        elif not module_name.startswith("backend."):
+            mod = importlib.import_module(f"backend.{module_name}")
+        else:
+            raise
+    factory = getattr(mod, attr)
     if not callable(factory):
         raise TypeError(f"Tracer factory {tracer_ref!r} is not callable")
     return factory
@@ -601,6 +611,30 @@ def run_in_sandbox(
             process.kill()
             process.join()
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def trace_in_sandbox(
+    code: str,
+    *,
+    timeout: float = SANDBOX_TIMEOUT_SECONDS,
+    max_steps: int = MAX_STEPS_DEFAULT,
+    memory_limit_mb: Optional[int] = MEMORY_LIMIT_MB,
+    stdout_limit: int = STDOUT_LIMIT_CHARS,
+) -> SandboxResult:
+    """Execute code inside the sandbox using the Stage 4 deterministic tracer.
+
+    Combines subprocess isolation, resource limits, hard timeout, and blocked
+    namespace with ground-truth TraceStep recording (variable deltas, loop/branch
+    flow contexts, all_variables, and stdout capture).
+    """
+    return run_in_sandbox(
+        code,
+        timeout=timeout,
+        max_steps=max_steps,
+        tracer=SANDBOXED_TRACER_REF,
+        memory_limit_mb=memory_limit_mb,
+        stdout_limit=stdout_limit,
+    )
 
 
 def main() -> int:

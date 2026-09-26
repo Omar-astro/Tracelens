@@ -1,0 +1,209 @@
+{
+  "status": "ok",
+  "steps": [
+    {
+      "line_number": 1,
+      "code_line": "x = 10",
+      "event_type": "line",
+      "loop_context": null,
+      "branch_context": null,
+      "variable_deltas": {
+        "x": {
+          "action": "created",
+          "var_name": "x",
+          "type_name": "int",
+          "old_value": null,
+          "new_value": 10,
+          "repr_str": "10",
+          "metadata": null
+        }
+      },
+      "all_variables": {
+        "x": "10"
+      },
+      "stdout_emitted": null,
+      "step_id": 1
+    },
+    {
+      "line_number": 2,
+      "code_line": "for i in [1, 2]:",
+      "event_type": "loop_iteration",
+      "loop_context": {
+        "loop_id": "loop_line_2",
+        "loop_type": "for",
+        "header_line": 2,
+        "current_iteration": 1,
+        "total_iterations": null,
+        "iterator_target": "i",
+        "iterator_value": null,
+        "is_exit_step": false
+      },
+      "branch_context": null,
+      "variable_deltas": {
+        "i": {
+          "action": "created",
+          "var_name": "i",
+          "type_name": "int",
+          "old_value": null,
+          "new_value": 1,
+          "repr_str": "1",
+          "metadata": null
+        }
+      },
+      "all_variables": {
+        "x": "10",
+        "i": "1"
+      },
+      "stdout_emitted": null,
+      "step_id": 2
+    },
+    {
+      "line_number": 3,
+      "code_line": "if i == 2:",
+      "event_type": "line",
+      "loop_context": {
+        "loop_id": "loop_line_2",
+        "loop_type": "for",
+        "header_line": 2,
+        "current_iteration": 1,
+        "total_iterations": null,
+        "iterator_target": "i",
+        "iterator_value": 1,
+        "is_exit_step": false
+      },
+      "branch_context": {
+        "branch_id": "branch_line_3",
+        "header_line": 3,
+        "condition_code": "i == 2",
+        "evaluated_truth": false,
+        "taken_line": 5,
+        "skipped_range": [
+          4,
+          4
+        ]
+      },
+      "variable_deltas": {},
+      "all_variables": {
+        "x": "10",
+        "i": "1"
+      },
+      "stdout_emitted": null,
+      "step_id": 3
+    },
+    {
+      "line_number": 2,
+      "code_line": "for i in [1, 2]:",
+      "event_type": "loop_iteration",
+      "loop_context": {
+        "loop_id": "loop_line_2",
+        "loop_type": "for",
+        "header_line": 2,
+        "current_iteration": 2,
+        "total_iterations": null,
+        "iterator_target": "i",
+        "iterator_value": 1,
+        "is_exit_step": false
+      },
+      "branch_context": null,
+      "variable_deltas": {
+        "i": {
+          "action": "mutated",
+          "var_name": "i",
+          "type_name": "int",
+          "old_value": 1,
+          "new_value": 2,
+          "repr_str": "2",
+          "metadata": null
+        }
+      },
+      "all_variables": {
+        "x": "10",
+        "i": "2"
+      },
+      "stdout_emitted": null,
+      "step_id": 4
+    },
+    {
+      "line_number": 3,
+      "code_line": "if i == 2:",
+      "event_type": "line",
+      "loop_context": {
+        "loop_id": "loop_line_2",
+        "loop_type": "for",
+        "header_line": 2,
+        "current_iteration": 2,
+        "total_iterations": null,
+        "iterator_target": "i",
+        "iterator_value": 2,
+        "is_exit_step": false
+      },
+      "branch_context": {
+        "branch_id": "branch_line_3",
+        "header_line": 3,
+        "condition_code": "i == 2",
+        "evaluated_truth": true,
+        "taken_line": 4,
+        "skipped_range": null
+      },
+      "variable_deltas": {},
+      "all_variables": {
+        "x": "10",
+        "i": "2"
+      },
+      "stdout_emitted": null,
+      "step_id": 5
+    },
+    {
+      "line_number": 4,
+      "code_line": "print(\"Bingo!\")",
+      "event_type": "line",
+      "loop_context": {
+        "loop_id": "loop_line_2",
+        "loop_type": "for",
+        "header_line": 2,
+        "current_iteration": 2,
+        "total_iterations": null,
+        "iterator_target": "i",
+        "iterator_value": 2,
+        "is_exit_step": false
+      },
+      "branch_context": null,
+      "variable_deltas": {},
+      "all_variables": {
+        "x": "10",
+        "i": "2"
+      },
+      "stdout_emitted": "Bingo!\n",
+      "step_id": 6
+    },
+    {
+      "line_number": 2,
+      "code_line": "for i in [1, 2]:",
+      "event_type": "loop_exit",
+      "loop_context": {
+        "loop_id": "loop_line_2",
+        "loop_type": "for",
+        "header_line": 2,
+        "current_iteration": 2,
+        "total_iterations": null,
+        "iterator_target": "i",
+        "iterator_value": 2,
+        "is_exit_step": true
+      },
+      "branch_context": null,
+      "variable_deltas": {},
+      "all_variables": {
+        "x": "10",
+        "i": "2"
+      },
+      "stdout_emitted": null,
+      "step_id": 7
+    }
+  ],
+  "stdout": "Bingo!\n",
+  "error": null,
+  "error_code": null,
+  "max_steps_reached": false,
+  "stdout_truncated": false,
+  "duration_ms": 89
+}

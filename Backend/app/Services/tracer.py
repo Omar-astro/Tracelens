@@ -9,18 +9,22 @@ Each dict matches the TraceStep data contract from Appendix A.
 
 import sys
 import io
-from typing import Optional, List, Any
+import copy
+from typing import Optional, List, Any, Callable, Dict
 
 # ---------------------------------------------------------------------------
 # Bring in Stage 3's FlowIndex (optional import — tracer still works standalone)
 # ---------------------------------------------------------------------------
 try:
-    from backend.app.Services.ast_flow import build_flow_index
+    from backend.app.services.ast_flow import build_flow_index
 except ImportError:
     try:
-        from ast_flow import build_flow_index
+        from app.services.ast_flow import build_flow_index
     except ImportError:
-        build_flow_index = None   # type: ignore
+        try:
+            from ast_flow import build_flow_index
+        except ImportError:
+            build_flow_index = None   # type: ignore
 
 # ---------------------------------------------------------------------------
 # Internal sentinel exception — used to halt execution when step cap is hit
@@ -116,6 +120,36 @@ def _variable_metadata(value: Any) -> Optional[dict]:
         pass
 
     return meta if meta else None
+
+
+def _snapshot_value(val: Any) -> Any:
+    """Return a safe snapshot of *val* for in-place mutation diffing."""
+    if val is None or isinstance(val, (int, float, str, bool, bytes)):
+        return val
+    if isinstance(val, list):
+        try:
+            return [copy.copy(item) if isinstance(item, (dict, list, set)) else item for item in val]
+        except Exception:
+            return list(val)
+    if isinstance(val, dict):
+        try:
+            return {k: (copy.copy(v) if isinstance(v, (dict, list, set)) else v) for k, v in val.items()}
+        except Exception:
+            return dict(val)
+    if isinstance(val, set):
+        return set(val)
+    if isinstance(val, tuple):
+        return val
+    try:
+        np = sys.modules.get("numpy")
+        if np is not None and isinstance(val, np.ndarray):
+            return val.copy()
+        pd = sys.modules.get("pandas")
+        if pd is not None and isinstance(val, (pd.DataFrame, pd.Series)):
+            return val.copy()
+    except Exception:
+        pass
+    return _safe_repr(val)
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +291,8 @@ def trace_execution(
     code: str,
     flow_index=None,    # Optional[FlowIndex]
     max_steps: int = 300,
+    use_sandbox: bool = False,
+    timeout: float = 8.0,
 ) -> List[dict]:
     """Execute *code* under sys.settrace and return a list of TraceStep dicts.
 
@@ -266,13 +302,23 @@ def trace_execution(
     flow_index  : Optional FlowIndex from ast_flow.build_flow_index().
                   If None and build_flow_index is available, it is built automatically.
     max_steps   : Maximum number of 'line' events to record (default 300).
-                  Once reached the trace hook is detached and execution continues
-                  but is no longer recorded.
+    use_sandbox : If True, runs inside the safety subprocess sandbox.
+    timeout     : Hard timeout in seconds when running under the sandbox (default 8.0).
 
     Returns
     -------
     List of TraceStep-shaped dicts (see Appendix A).
     """
+    if use_sandbox:
+        try:
+            from backend.app.services.sandbox import trace_in_sandbox
+        except ImportError:
+            try:
+                from app.services.sandbox import trace_in_sandbox
+            except ImportError:
+                from sandbox import trace_in_sandbox
+        res = trace_in_sandbox(code, timeout=timeout, max_steps=max_steps)
+        return res.steps
 
     # Auto-build flow index if caller didn't supply one
     if flow_index is None and build_flow_index is not None:
@@ -357,7 +403,7 @@ def trace_execution(
                 last["stdout_emitted"] = (last["stdout_emitted"] or "") + stdout_chunk
 
         prev_locals.clear()
-        prev_locals.update(raw_locals)
+        prev_locals.update({k: _snapshot_value(v) for k, v in raw_locals.items()})
 
         # ---- loop context --------------------------------------------------
         loop_ctx = None
@@ -451,6 +497,144 @@ def trace_execution(
                 last["stdout_emitted"] = (last["stdout_emitted"] or "") + final_out
 
     return steps
+
+
+# ---------------------------------------------------------------------------
+# Tracer factory for sandbox.py integration
+# ---------------------------------------------------------------------------
+
+def build_tracer(ctx: Any) -> Callable:
+    """Factory creating a sys.settrace hook from a sandbox TraceContext.
+
+    Adheres to sandbox.py TracerFactory contract: (ctx: TraceContext) -> global_tracer.
+    Emits schema-compliant TraceStep dicts through ctx.emit().
+    """
+    flow = None
+    if build_flow_index is not None:
+        try:
+            flow = build_flow_index(ctx.code)
+        except Exception:
+            flow = None
+
+    prev_locals: dict = {}
+    loop_iterations: dict = {}
+    loop_last_header_step: dict = {}
+    stdout_cursor = [0]
+
+    def _flush_stdout() -> Optional[str]:
+        try:
+            out = sys.stdout.getvalue()
+            new_text = out[stdout_cursor[0]:]
+            stdout_cursor[0] = len(out)
+            return new_text if new_text else None
+        except Exception:
+            return None
+
+    def local_tracer(frame, event, _arg):
+        if event == "return":
+            if flow is not None:
+                for lid, header_idx in loop_last_header_step.items():
+                    if 0 <= header_idx < len(ctx.steps):
+                        s = ctx.steps[header_idx]
+                        if s.get("event_type") == "loop_iteration":
+                            s["event_type"] = "loop_exit"
+                            if s.get("loop_context"):
+                                s["loop_context"]["is_exit_step"] = True
+                                s["loop_context"]["current_iteration"] = max(
+                                    s["loop_context"]["current_iteration"] - 1, 0
+                                )
+                                loop_iterations[lid] = max(loop_iterations.get(lid, 1) - 1, 0)
+            if ctx.steps:
+                last = ctx.steps[-1]
+                final_locals = {k: v for k, v in frame.f_locals.items() if not k.startswith("__")}
+                last["variable_deltas"] = _diff_locals(prev_locals, final_locals)
+                last["all_variables"] = {k: _safe_repr(v) for k, v in final_locals.items()}
+                out_chunk = _flush_stdout()
+                if out_chunk:
+                    last["stdout_emitted"] = (last["stdout_emitted"] or "") + out_chunk
+            return local_tracer
+
+        if event == "exception":
+            if ctx.steps:
+                last = ctx.steps[-1]
+                curr_locals = {k: v for k, v in frame.f_locals.items() if not k.startswith("__")}
+                last["variable_deltas"] = _diff_locals(prev_locals, curr_locals)
+                last["all_variables"] = {k: _safe_repr(v) for k, v in curr_locals.items()}
+                out_chunk = _flush_stdout()
+                if out_chunk:
+                    last["stdout_emitted"] = (last["stdout_emitted"] or "") + out_chunk
+            return local_tracer
+
+        if event != "line":
+            return local_tracer
+
+        lineno = frame.f_lineno
+        text = ctx.code_line(lineno)
+
+        raw_locals = {k: v for k, v in frame.f_locals.items() if not k.startswith("__")}
+        if ctx.steps:
+            last = ctx.steps[-1]
+            last["variable_deltas"] = _diff_locals(prev_locals, raw_locals)
+            last["all_variables"] = {k: _safe_repr(v) for k, v in raw_locals.items()}
+            out_chunk = _flush_stdout()
+            if out_chunk:
+                last["stdout_emitted"] = (last["stdout_emitted"] or "") + out_chunk
+
+        prev_locals.clear()
+        prev_locals.update({k: _snapshot_value(v) for k, v in raw_locals.items()})
+
+        loop_ctx = None
+        if flow is not None:
+            loop_info = flow.get_loop_for_line(lineno)
+            if loop_info is not None:
+                lid = loop_info.loop_id
+                if lineno == loop_info.header_line:
+                    loop_iterations[lid] = loop_iterations.get(lid, 0) + 1
+                    loop_last_header_step[lid] = len(ctx.steps)
+                loop_ctx = _build_loop_context(
+                    loop_info,
+                    loop_iterations.get(lid, 1),
+                    raw_locals,
+                )
+
+        branch_ctx = None
+        if flow is not None:
+            branch_info = flow.get_branch_for_line(lineno)
+            if branch_info is not None:
+                truth = _eval_branch_truth(branch_info, raw_locals, frame.f_globals)
+                if truth is not None:
+                    branch_ctx = _build_branch_context(branch_info, truth)
+
+        if loop_ctx is not None:
+            if lineno == loop_ctx["header_line"]:
+                event_type = "loop_iteration"
+            else:
+                event_type = "line"
+        elif branch_ctx is not None:
+            event_type = "branch_decision"
+        else:
+            event_type = "line"
+
+        step = {
+            "line_number": lineno,
+            "code_line": text,
+            "event_type": event_type,
+            "loop_context": loop_ctx,
+            "branch_context": branch_ctx,
+            "variable_deltas": {},
+            "all_variables": {k: _safe_repr(v) for k, v in prev_locals.items()},
+            "stdout_emitted": None,
+        }
+
+        ctx.emit(step)
+        return local_tracer
+
+    def global_tracer(frame, event, _arg):
+        if event == "call" and frame.f_code.co_filename == ctx.filename:
+            return local_tracer
+        return None
+
+    return global_tracer
 
 
 # ---------------------------------------------------------------------------

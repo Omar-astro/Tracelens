@@ -37,7 +37,7 @@ class StepLimitReached(Exception):
 # Constants
 # ---------------------------------------------------------------------------
 FAKE_FILENAME = "<tracelens_user_code>"
-_REPR_MAX = 110   # max chars for repr_str / all_variables values
+_REPR_MAX = 500   # max chars for repr_str / all_variables values
 
 # ---------------------------------------------------------------------------
 # JSON-safe serializer
@@ -156,57 +156,104 @@ def _snapshot_value(val: Any) -> Any:
 # Variable diffing
 # ---------------------------------------------------------------------------
 
+def _iter_target_vars(iterator_target: str) -> list:
+    """Split a LoopInfo.iterator_target string into individual variable names.
+
+    e.g. "i"       -> ["i"]
+         "a, b"    -> ["a", "b"]
+         ""        -> []
+    """
+    if not iterator_target:
+        return []
+    return [v.strip() for v in iterator_target.split(",") if v.strip()]
+
+
 def _diff_locals(
     prev: dict,
     curr: dict,
+    excluded_vars: set | None = None,
 ) -> dict:
     """Produce variable_deltas dict keyed by var_name.
 
     Only includes variables that actually changed: "created", "mutated", or "deleted".
     "unchanged" variables are intentionally excluded — they are already captured in
     all_variables and their inclusion only bloats the payload.
+
+    Parameters
+    ----------
+    excluded_vars : set of variable names that should be treated as "deleted"
+        even if they are still present in *curr* (used to model loop-scope exit).
     """
+    if excluded_vars is None:
+        excluded_vars = set()
+
     deltas: dict = {}
 
-    all_keys = set(prev.keys()) | set(curr.keys())
+    # Force-emit "deleted" entries for loop variables that have gone out of scope.
+    for key in excluded_vars:
+        if key in prev:
+            deltas[key] = {
+                "action": "deleted",
+                "var_name": key,
+                "type_name": type(prev[key]).__name__,
+                "old_value": _safe_value(prev[key]),
+                "new_value": None,
+                "repr_str": _safe_repr(prev[key]),
+                "metadata": _variable_metadata(prev[key]),
+            }
+
+    # Build a view of curr that excludes loop-scoped variables.
+    curr_visible = {k: v for k, v in curr.items() if k not in excluded_vars}
+
+    all_keys = set(prev.keys()) | set(curr_visible.keys())
+    all_keys -= excluded_vars  # already handled above
     for key in all_keys:
         in_prev = key in prev
-        in_curr = key in curr
+        in_curr = key in curr_visible
 
         if not in_prev and in_curr:
             action = "created"
             old_val = None
-            new_val = curr[key]
+            new_val = curr_visible[key]
         elif in_prev and not in_curr:
             action = "deleted"
             old_val = prev[key]
             new_val = None
         else:
             old_val = prev[key]
-            new_val = curr[key]
-            # Try equality; fall back to repr comparison for NumPy etc.
+            new_val = curr_visible[key]
+            # Try equality; fall back to repr comparison for NumPy/pandas etc.
             try:
                 np = sys.modules.get("numpy")
+                pd = sys.modules.get("pandas")
                 if np is not None and isinstance(new_val, np.ndarray):
                     changed = not np.array_equal(old_val, new_val)
+                elif pd is not None and isinstance(new_val, (pd.DataFrame, pd.Series)):
+                    changed = _safe_repr(old_val) != _safe_repr(new_val)
                 else:
-                    changed = old_val != new_val
+                    result = old_val != new_val
+                    # Guard against objects (e.g. pandas) that return a
+                    # non-scalar from __ne__ — fall back to repr comparison.
+                    if not isinstance(result, bool):
+                        changed = _safe_repr(old_val) != _safe_repr(new_val)
+                    else:
+                        changed = result
             except Exception:
                 changed = _safe_repr(old_val) != _safe_repr(new_val)
 
             if not changed:
-                continue  # Bug 1 fix: skip unchanged variables entirely
+                continue  # skip unchanged variables entirely
 
             action = "mutated"
 
         deltas[key] = {
             "action": action,
             "var_name": key,
-            "type_name": type(curr[key]).__name__ if in_curr else type(prev[key]).__name__,
+            "type_name": type(curr_visible[key]).__name__ if in_curr else type(prev[key]).__name__,
             "old_value": _safe_value(old_val),
             "new_value": _safe_value(new_val),
-            "repr_str": _safe_repr(curr[key] if in_curr else prev[key]),
-            "metadata": _variable_metadata(curr[key] if in_curr else prev[key]),
+            "repr_str": _safe_repr(curr_visible[key] if in_curr else prev[key]),
+            "metadata": _variable_metadata(curr_visible[key] if in_curr else prev[key]),
         }
 
     return deltas
@@ -339,6 +386,8 @@ def trace_execution(
     # step_id of the most recent header step for each loop {loop_id -> step_id}
     # Used to retroactively mark the exit step via the 'return' event.
     loop_last_header_step: dict = {}
+    # loop_id of the loop active in the PREVIOUS step (for scope-exit detection)
+    prev_loop_id: list = [None]
 
     # Stdout interception
     captured_stdout = io.StringIO()
@@ -386,30 +435,71 @@ def trace_execution(
             else ""
         )
 
-        # ---- Bug 2 fix: backfill previous step before building this one ----
+        # ---- Backfill previous step before building this one ---------------
         # sys.settrace fires 'line' BEFORE the line executes, so the locals
         # and stdout we see now are the result of the *previous* line.
         # Patch the last recorded step with the post-execution state.
         raw_locals = {
             k: v for k, v in frame.f_locals.items() if not k.startswith("__")
         }
+
+        # Compute which variables to hide from the previous step's snapshot:
+        #
+        # 1. exited_vars — iterator targets of a loop that was active last step
+        #    but is NOT active now (loop just finished).  Python keeps them in
+        #    frame.f_locals after the loop ends, so we must exclude them.
+        #
+        # 2. entering_vars — iterator targets of a NEW loop whose header is the
+        #    CURRENT line.  sys.settrace fires the 'line' event BEFORE execution,
+        #    so the iterator variable already holds its first value in f_locals
+        #    even though the previous step hasn't finished yet.  Hiding these
+        #    vars from the previous step's backfill prevents them leaking in.
+        hidden_vars: set = set()
+        curr_loop_info_for_lineno = flow_index.get_loop_for_line(lineno) if flow_index is not None else None
+        curr_lid = curr_loop_info_for_lineno.loop_id if curr_loop_info_for_lineno is not None else None
+
+        if flow_index is not None and prev_loop_id[0] is not None and curr_lid != prev_loop_id[0]:
+            # A loop exited — hide its iterator targets.
+            for loop_info_candidate in flow_index.loops.values():
+                if loop_info_candidate.loop_id == prev_loop_id[0]:
+                    hidden_vars |= set(_iter_target_vars(loop_info_candidate.iterator_target))
+                    break
+
+        if (
+            flow_index is not None
+            and curr_loop_info_for_lineno is not None
+            and lineno == curr_loop_info_for_lineno.header_line
+            and curr_lid != prev_loop_id[0]
+        ):
+            # Entering a new loop — hide its iterator targets from the *previous*
+            # step's backfill (they haven't logically appeared yet).
+            hidden_vars |= set(_iter_target_vars(curr_loop_info_for_lineno.iterator_target))
+
+        # visible_locals is raw_locals minus any hidden variables.
+        visible_locals = {k: v for k, v in raw_locals.items() if k not in hidden_vars}
+        exited_vars = hidden_vars  # alias — _diff_locals uses this name
+
         if steps:
             last = steps[-1]
-            post_deltas = _diff_locals(prev_locals, raw_locals)
+            post_deltas = _diff_locals(prev_locals, raw_locals, excluded_vars=exited_vars)
             last["variable_deltas"] = post_deltas
-            last["all_variables"] = {k: _safe_repr(v) for k, v in raw_locals.items()}
+            last["all_variables"] = {k: _safe_repr(v) for k, v in visible_locals.items()}
             stdout_chunk = _flush_stdout()
             if stdout_chunk:
                 last["stdout_emitted"] = (last["stdout_emitted"] or "") + stdout_chunk
 
+        # prev_locals uses visible_locals so that exited variables are not carried
+        # forward into the next step's diff (avoids spurious "deleted" on step N+2).
         prev_locals.clear()
-        prev_locals.update({k: _snapshot_value(v) for k, v in raw_locals.items()})
+        prev_locals.update({k: _snapshot_value(v) for k, v in visible_locals.items()})
 
         # ---- loop context --------------------------------------------------
         loop_ctx = None
         is_exit = False
         if flow_index is not None:
             loop_info = flow_index.get_loop_for_line(lineno)
+            # Track which loop is active so the NEXT step's backfill can detect exits.
+            prev_loop_id[0] = loop_info.loop_id if loop_info is not None else None
             if loop_info is not None:
                 lid = loop_info.loop_id
                 if lineno == loop_info.header_line:
@@ -451,7 +541,7 @@ def trace_execution(
             event_type = "line"
 
         # This step's deltas/stdout are placeholders — they will be backfilled
-        # at the start of the NEXT line event (see Bug 2 fix above).
+        # at the start of the NEXT line event.
         steps.append({
             "step_id": step_counter[0],
             "line_number": lineno,
@@ -519,6 +609,7 @@ def build_tracer(ctx: Any) -> Callable:
     prev_locals: dict = {}
     loop_iterations: dict = {}
     loop_last_header_step: dict = {}
+    prev_loop_id: list = [None]
     stdout_cursor = [0]
 
     def _flush_stdout() -> Optional[str]:
@@ -572,20 +663,43 @@ def build_tracer(ctx: Any) -> Callable:
         text = ctx.code_line(lineno)
 
         raw_locals = {k: v for k, v in frame.f_locals.items() if not k.startswith("__")}
+
+        hidden_vars: set = set()
+        curr_loop_info_for_lineno = flow.get_loop_for_line(lineno) if flow is not None else None
+        curr_lid = curr_loop_info_for_lineno.loop_id if curr_loop_info_for_lineno is not None else None
+
+        if flow is not None and prev_loop_id[0] is not None and curr_lid != prev_loop_id[0]:
+            for loop_info_candidate in flow.loops.values():
+                if loop_info_candidate.loop_id == prev_loop_id[0]:
+                    hidden_vars |= set(_iter_target_vars(loop_info_candidate.iterator_target))
+                    break
+
+        if (
+            flow is not None
+            and curr_loop_info_for_lineno is not None
+            and lineno == curr_loop_info_for_lineno.header_line
+            and curr_lid != prev_loop_id[0]
+        ):
+            hidden_vars |= set(_iter_target_vars(curr_loop_info_for_lineno.iterator_target))
+
+        visible_locals = {k: v for k, v in raw_locals.items() if k not in hidden_vars}
+        exited_vars = hidden_vars
+
         if ctx.steps:
             last = ctx.steps[-1]
-            last["variable_deltas"] = _diff_locals(prev_locals, raw_locals)
-            last["all_variables"] = {k: _safe_repr(v) for k, v in raw_locals.items()}
+            last["variable_deltas"] = _diff_locals(prev_locals, raw_locals, excluded_vars=exited_vars)
+            last["all_variables"] = {k: _safe_repr(v) for k, v in visible_locals.items()}
             out_chunk = _flush_stdout()
             if out_chunk:
                 last["stdout_emitted"] = (last["stdout_emitted"] or "") + out_chunk
 
         prev_locals.clear()
-        prev_locals.update({k: _snapshot_value(v) for k, v in raw_locals.items()})
+        prev_locals.update({k: _snapshot_value(v) for k, v in visible_locals.items()})
 
         loop_ctx = None
         if flow is not None:
             loop_info = flow.get_loop_for_line(lineno)
+            prev_loop_id[0] = loop_info.loop_id if loop_info is not None else None
             if loop_info is not None:
                 lid = loop_info.loop_id
                 if lineno == loop_info.header_line:
@@ -622,7 +736,7 @@ def build_tracer(ctx: Any) -> Callable:
             "loop_context": loop_ctx,
             "branch_context": branch_ctx,
             "variable_deltas": {},
-            "all_variables": {k: _safe_repr(v) for k, v in prev_locals.items()},
+            "all_variables": {k: _safe_repr(v) for k, v in visible_locals.items()},
             "stdout_emitted": None,
         }
 

@@ -1,13 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 
 /**
- * CodeViewer — Stage 7 + Stage 10: Read-only syntax viewer with gutter markers.
+ * CodeViewer — Stage 7 + Stage 10 + Stage 14: Read-only syntax viewer with gutter markers.
  *
  * - Highlights and auto-scrolls to the line matching currentStep.line_number.
  * - Stage 10: Renders a ★ Safe Hook gutter marker on any line in safeInsertionPoints.
- * - Clicking a ★ marker calls onGutterMarkerClick(safeInsertionPoint).
+ * - Stage 14: Renders a hazard stripe on any line flagged by the ModelLens audit.
+ *   The hazard column sits immediately right of the Stage 10 column — additive,
+ *   the Safe Hook marker is untouched.
+ * - Clicking a marker calls the matching onGutterMarkerClick / onAuditMarkerClick.
  * - No editing; no Monaco dependency — pure React + Tailwind.
  */
+import { SEVERITY_META, HAZARD_FILL, HAZARD_ROW_TINT, worstSeverity } from './mlAuditMeta';
+
 // Lightweight Python syntax tokenizer for read-only Prism-style presentation
 function highlightPythonLine(line) {
   const trimmed = line.trimStart();
@@ -91,6 +96,10 @@ export default function CodeViewer({
   safeInsertionPoints = [],
   selectedSafePoint = null,
   onGutterMarkerClick = null,
+  onLineClick = null,
+  mlAuditIssues = [],
+  selectedAuditIssue = null,
+  onAuditMarkerClick = null,
 }) {
   // Build a fast lookup: lineNumber → SafeInsertionPoint
   const safeLineMap = React.useMemo(() => {
@@ -100,6 +109,17 @@ export default function CodeViewer({
     }
     return map;
   }, [safeInsertionPoints]);
+
+  // Stage 14: lineNumber → MLAuditIssue[]  (an ARRAY — several issues can share a line)
+  const auditLineMap = React.useMemo(() => {
+    const map = {};
+    for (const issue of mlAuditIssues) {
+      if (!map[issue.line_number]) map[issue.line_number] = [];
+      map[issue.line_number].push(issue);
+    }
+    return map;
+  }, [mlAuditIssues]);
+
   const activeLine = currentStep?.line_number ?? null;
   const lines = code ? code.split('\n') : [];
 
@@ -139,18 +159,39 @@ export default function CodeViewer({
           const safePoint = safeLineMap[lineNum];
           const isSafePointSelected = selectedSafePoint?.line_number === lineNum;
 
+          // Stage 14: hazard markers for this line
+          const auditIssues = auditLineMap[lineNum];
+          const hasAudit = !!auditIssues && auditIssues.length > 0;
+          const lineSeverity = hasAudit ? worstSeverity(auditIssues) : null;
+          const isAuditSelected =
+            hasAudit && auditIssues.some((i) => i.issue_id === selectedAuditIssue?.issue_id);
+          // Cycle through the issues on this line on repeated clicks.
+          const activeAuditIndex = hasAudit
+            ? Math.max(
+                0,
+                auditIssues.findIndex((i) => i.issue_id === selectedAuditIssue?.issue_id)
+              )
+            : 0;
+
+          // Hazard tint only applies when the line is not showing the active/skipped state.
+          const hazardTint =
+            hasAudit && !isActive && !isSkipped ? HAZARD_ROW_TINT[lineSeverity] : null;
+
           return (
             <div
               key={lineNum}
               ref={(el) => {
                 if (el) lineRefs.current[lineNum] = el;
               }}
+              onClick={() => onLineClick && onLineClick(lineNum)}
               className={`flex items-stretch min-w-max transition-colors duration-100 ${
+                onLineClick ? 'cursor-pointer' : ''
+              } ${
                 isActive
                   ? 'bg-cyan-500/15 border-l-2 border-cyan-400 shadow-sm'
                   : isSkipped
                     ? 'bg-red-950/20 border-l-2 border-red-800/40 opacity-40'
-                    : 'border-l-2 border-transparent hover:bg-slate-800/40'
+                    : hazardTint || 'border-l-2 border-transparent hover:bg-slate-800/40'
               }`}
             >
               {/* Gutter: line number */}
@@ -183,6 +224,35 @@ export default function CodeViewer({
                   >
                     <span className="text-amber-400 font-bold leading-none">★</span>
                     <span className="text-[9px] uppercase tracking-wider font-semibold leading-none">Safe Hook</span>
+                  </button>
+                ) : (
+                  <span aria-hidden="true" />
+                )}
+              </div>
+
+              {/* Stage 14 gutter column: hazard stripe on ModelLens-flagged lines */}
+              <div className="shrink-0 w-4 flex items-center justify-center">
+                {hasAudit ? (
+                  <button
+                    type="button"
+                    title={`[ModelLens ${lineSeverity}] Line ${lineNum}: ${auditIssues[activeAuditIndex].title}${auditIssues.length > 1 ? ` (+${auditIssues.length - 1} more)` : ''}`}
+                    onClick={() =>
+                      onAuditMarkerClick &&
+                      onAuditMarkerClick(auditIssues[activeAuditIndex])
+                    }
+                    className={`group relative w-2.5 h-6 rounded-sm border transition-all cursor-pointer shadow-sm ${
+                      isAuditSelected
+                        ? 'ring-2 ring-white/60 scale-110'
+                        : 'hover:scale-110 hover:brightness-125'
+                    } ${SEVERITY_META[lineSeverity]?.border ?? 'border-slate-600'}`}
+                    style={{ backgroundImage: HAZARD_FILL[lineSeverity] }}
+                    aria-label={`[ModelLens ${lineSeverity}] Line ${lineNum}: ${auditIssues[activeAuditIndex].title}`}
+                  >
+                    {auditIssues.length > 1 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[13px] h-[13px] px-[2px] rounded-full bg-slate-900 border border-slate-500 text-[8px] font-mono font-bold text-slate-200 flex items-center justify-center">
+                        {auditIssues.length}
+                      </span>
+                    )}
                   </button>
                 ) : (
                   <span aria-hidden="true" />

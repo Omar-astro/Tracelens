@@ -3,8 +3,10 @@ import React, { useState } from 'react';
 export default function LogicLensCodeViewer({
   code,
   currentStep,
+  steps = [],
   selectedLineNumber,
   onSelectLine,
+  onJumpToStep,
   onOpenSafeHookDrawer
 }) {
   const [copied, setCopied] = useState(false);
@@ -66,6 +68,15 @@ export default function LogicLensCodeViewer({
           // Check if line is within currently skipped branch range
           const isSkippedLine = skippedRange && lineNum >= skippedRange[0] && lineNum <= skippedRange[1];
 
+          // Jump to first step at this line when clicked
+          const handleLineClick = () => {
+            onSelectLine(lineNum);
+            if (onJumpToStep && steps.length > 0) {
+              const idx = steps.findIndex(s => s.line_number === lineNum);
+              if (idx !== -1) onJumpToStep(idx);
+            }
+          };
+
           // Safe Hook Line Highlight
           if (isSafeHookLine) {
             return (
@@ -77,7 +88,7 @@ export default function LogicLensCodeViewer({
                 <div
                   className="flex items-center justify-between cursor-pointer"
                   onClick={() => {
-                    onSelectLine(lineNum);
+                    handleLineClick();
                     onOpenSafeHookDrawer();
                   }}
                 >
@@ -109,8 +120,8 @@ export default function LogicLensCodeViewer({
               <div
                 key={lineNum}
                 id={`code-line-${lineNum}`}
-                className="my-0.5 rounded bg-primary-container/20 border-l-4 border-primary px-1 py-1 flex items-start cursor-pointer shadow-md transition-all"
-                onClick={() => onSelectLine(lineNum)}
+                className="my-0.5 rounded bg-primary-container/20 border-l-4 border-primary px-1 py-1 flex items-start cursor-pointer shadow-md transition-all hover:bg-slate-800/50"
+                onClick={handleLineClick}
               >
                 <div className="w-8 text-right pr-2 select-none text-primary font-bold flex items-center justify-end gap-1">
                   <span className="material-symbols-outlined text-[13px] text-primary animate-pulse">
@@ -135,11 +146,11 @@ export default function LogicLensCodeViewer({
             <div
               key={lineNum}
               id={`code-line-${lineNum}`}
-              onClick={() => onSelectLine(lineNum)}
-              className={`flex items-start px-1 py-0.5 rounded cursor-pointer transition-colors ${
+              onClick={handleLineClick}
+              className={`flex items-start px-1 py-0.5 rounded cursor-pointer transition-colors hover:bg-slate-800/50 ${
                 isSelected
                   ? 'bg-surface-container-high border-l-2 border-secondary'
-                  : 'hover:bg-surface-container/50'
+                  : ''
               } ${isSkippedLine ? 'opacity-40 line-through text-outline' : ''}`}
             >
               <span className="w-8 text-right pr-2 select-none text-outline font-code-sm text-code-sm">

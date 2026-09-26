@@ -30,6 +30,10 @@ try:
         explain_step_in_context,
         generate_fallback_explanation,
         build_b1_prompt,
+        HandoffSummary,
+        generate_handoff_summary,
+        generate_fallback_handoff_summary,
+        build_b2_prompt,
     )
 except ImportError:
     from app.main import app
@@ -38,6 +42,10 @@ except ImportError:
         explain_step_in_context,
         generate_fallback_explanation,
         build_b1_prompt,
+        HandoffSummary,
+        generate_handoff_summary,
+        generate_fallback_handoff_summary,
+        build_b2_prompt,
     )
 
 client = TestClient(app)
@@ -259,3 +267,78 @@ def test_api_explain_step_invalid_line_number():
     response = client.post("/api/explain-step", json=payload)
     assert response.status_code == 400
     assert "line_number must be greater than or equal to 1" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Stage 14: HandoffSummary Unit & Integration Tests (Appendix B.2)
+# ---------------------------------------------------------------------------
+
+def test_handoff_summary_schema():
+    """Verify that HandoffSummary conforms to Appendix A/B.2."""
+    summary = HandoffSummary(
+        overall_purpose="Processes user logs.",
+        key_data_structures=[{"name": "records", "role": "list of dicts", "final_state_summary": "4 items"}],
+        safe_continuation_strategy="Extend after loop.",
+        cautions_for_teammate=["Avoid modifying state."],
+    )
+    data = summary.model_dump()
+    assert "overall_purpose" in data
+    assert "key_data_structures" in data
+    assert "safe_continuation_strategy" in data
+    assert "cautions_for_teammate" in data
+
+
+def test_build_b2_prompt():
+    """Verify Appendix B.2 prompt includes code, safe points, and variable states."""
+    prompt = build_b2_prompt(
+        code="x = 1\ny = 2",
+        safe_insertion_points=[{"line_number": 2, "target_variable": "y"}],
+        terminal_variables={"x": "1", "y": "2"},
+    )
+    assert "x = 1" in prompt
+    assert "Detected Safe Insertion Points:" in prompt
+    assert "Final Variable States:" in prompt
+    assert "Output strictly valid JSON with keys:" in prompt
+
+
+def test_generate_fallback_handoff_summary():
+    """Verify fallback handoff summary generates all required fields without crashing."""
+    summary = generate_fallback_handoff_summary(
+        code="cleaned = []\nfor r in raw:\n    cleaned.append(r)\nprint('Done')",
+        safe_insertion_points=[{"line_number": 4, "target_variable": "cleaned", "reason": "Loop done"}],
+        terminal_variables={"cleaned": "[]"},
+    )
+    assert isinstance(summary, HandoffSummary)
+    assert summary.overall_purpose
+    assert len(summary.key_data_structures) > 0
+    assert summary.safe_continuation_strategy
+    assert len(summary.cautions_for_teammate) > 0
+
+
+def test_api_handoff_summary_endpoint():
+    """Test POST /api/handoff-summary returns 200 with schema-valid response."""
+    payload = {
+        "code": "cleaned = []\nfor r in raw:\n    cleaned.append(r)",
+        "safe_insertion_points": [{"line_number": 3, "target_variable": "cleaned", "reason": "Loop done"}],
+        "terminal_variables": {"cleaned": "[]"},
+    }
+    response = client.post("/api/handoff-summary", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "overall_purpose" in data
+    assert "key_data_structures" in data
+    assert "safe_continuation_strategy" in data
+    assert "cautions_for_teammate" in data
+
+
+def test_api_handoff_summary_empty_code():
+    """Test POST /api/handoff-summary rejects empty code."""
+    payload = {
+        "code": "   ",
+        "safe_insertion_points": [],
+        "terminal_variables": {},
+    }
+    response = client.post("/api/handoff-summary", json=payload)
+    assert response.status_code == 400
+    assert "code must be a non-empty string" in response.json()["detail"]
+

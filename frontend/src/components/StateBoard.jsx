@@ -1,15 +1,37 @@
 import React, { useState } from 'react';
 
-export default function StateBoard({ currentStep }) {
+export default function StateBoard({ currentStep, traceSteps = [], onJumpToStep = null }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedVar, setExpandedVar] = useState(null);
 
+  // Build varName → first step index where that variable was created.
+  // Computed once per trace (traceSteps is stable between steps).
+  const varBirthMap = React.useMemo(() => {
+    const map = {};
+    traceSteps.forEach((step, idx) => {
+      const deltas = step.variable_deltas || {};
+      Object.values(deltas).forEach((d) => {
+        if (d.action === 'created' && !(d.var_name in map)) {
+          map[d.var_name] = idx;
+        }
+      });
+    });
+    return map;
+  }, [traceSteps]);
+
   const deltas = currentStep?.variable_deltas || {};
-  const deltaKeys = Object.keys(deltas);
+  // Filter out any import — modules, classes, functions, builtins all produce a
+  // repr_str that starts with '<'. User data never looks like that.
+  const isImportDelta = (d) =>
+    typeof d.repr_str === 'string' && d.repr_str.startsWith('<');
+  const deltaKeys = Object.keys(deltas).filter((k) => !isImportDelta(deltas[k]));
 
   const allVars = currentStep?.all_variables || {};
-  const varEntries = Object.entries(allVars).filter(([key]) =>
-    key.toLowerCase().includes(searchTerm.toLowerCase())
+  // Same rule for the scope snapshot: drop anything whose repr starts with '<'.
+  const isImportVar = (val) => typeof val === 'string' && val.startsWith('<');
+  const varEntries = Object.entries(allVars).filter(
+    ([key, val]) =>
+      !isImportVar(val) && key.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -52,7 +74,7 @@ export default function StateBoard({ currentStep }) {
               return (
                 <div
                   key={key}
-                  className={`p-2.5 rounded-lg border flex flex-col gap-1 font-mono transition-all ${
+                  className={`p-2.5 rounded-lg border flex flex-col gap-1 font-mono transition-all min-w-0 overflow-hidden ${
                     isCreated
                       ? 'bg-secondary/10 border-secondary/40'
                       : isMutated
@@ -83,19 +105,19 @@ export default function StateBoard({ currentStep }) {
                   </div>
 
                   {/* Value representation */}
-                  <div className="bg-surface-container-lowest/90 p-1.5 rounded border border-surface-variant/30 text-code-sm text-on-surface overflow-x-auto">
+                  <div className="bg-surface-container-lowest/90 p-1.5 rounded border border-surface-variant/30 text-code-sm text-on-surface min-w-0 overflow-hidden">
                     {isMutated && delta.old_value !== undefined ? (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="line-through text-outline">
+                      <div className="flex items-start gap-2 flex-wrap min-w-0">
+                        <span className="line-through text-outline font-mono text-xs break-all whitespace-pre-wrap max-h-20 overflow-y-auto min-w-0">
                           {typeof delta.old_value === 'object' ? JSON.stringify(delta.old_value) : String(delta.old_value)}
                         </span>
-                        <span className="text-primary font-bold">➔</span>
-                        <span className="text-secondary font-semibold">
+                        <span className="text-primary font-bold shrink-0">➔</span>
+                        <span className="text-secondary font-semibold font-mono text-xs break-all whitespace-pre-wrap max-h-20 overflow-y-auto min-w-0">
                           {delta.repr_str || (typeof delta.new_value === 'object' ? JSON.stringify(delta.new_value) : String(delta.new_value))}
                         </span>
                       </div>
                     ) : (
-                      <div className="text-secondary">
+                      <div className="text-secondary font-mono text-xs break-all whitespace-pre-wrap max-h-20 overflow-y-auto min-w-0">
                         {delta.repr_str || (typeof delta.new_value === 'object' ? JSON.stringify(delta.new_value) : String(delta.new_value))}
                       </div>
                     )}
@@ -147,21 +169,31 @@ export default function StateBoard({ currentStep }) {
               No matching variables in current frame scope.
             </div>
           ) : (
-            varEntries.map(([key, val]) => (
-              <div
-                key={key}
-                onClick={() => setExpandedVar(expandedVar === key ? null : key)}
-                className="grid grid-cols-12 px-2 py-1.5 border-b border-surface-variant/15 hover:bg-surface-container/40 transition-colors items-center cursor-pointer"
-              >
-                <div className="col-span-4 flex items-center gap-1 font-semibold text-primary truncate">
-                  <span className="material-symbols-outlined text-[12px] text-outline">data_object</span>
-                  <span>{key}</span>
+            varEntries.map(([key, val]) => {
+              const birthIdx = varBirthMap[key] ?? null;
+              const canJump = onJumpToStep !== null && birthIdx !== null;
+              return (
+                <div
+                  key={key}
+                  onClick={() => canJump ? onJumpToStep(birthIdx) : setExpandedVar(expandedVar === key ? null : key)}
+                  title={canJump ? `Jump to step where ${key} was created` : undefined}
+                  className="grid grid-cols-12 px-2 py-1.5 border-b border-surface-variant/15 hover:bg-surface-container/40 transition-colors items-start cursor-pointer min-w-0"
+                >
+                  <div className="col-span-4 flex items-center gap-1 font-semibold text-primary truncate min-w-0">
+                    <span className="material-symbols-outlined text-[12px] text-outline shrink-0">data_object</span>
+                    <span className="truncate">{key}</span>
+                    {canJump && (
+                      <span className="shrink-0 text-[9px] font-mono text-outline opacity-50 group-hover:opacity-100">
+                        ⬆{birthIdx + 1}
+                      </span>
+                    )}
+                  </div>
+                  <div className="col-span-8 font-mono text-xs break-all whitespace-pre-wrap max-h-20 overflow-y-auto min-w-0 text-on-surface-variant">
+                    {val}
+                  </div>
                 </div>
-                <div className="col-span-8 text-on-surface-variant truncate">
-                  {val}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

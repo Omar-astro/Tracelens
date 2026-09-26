@@ -193,7 +193,7 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
     elif "while True" in code or "while 1" in code:
         effective_max_steps = 10**9
     else:
-        effective_max_steps = 300
+        effective_max_steps = 1000
 
     filename = payload.filename or "<tracelens_user_code>"
 

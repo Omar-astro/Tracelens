@@ -230,24 +230,24 @@ export default function LoopVisualizer({
           {accumulators.slice(0, 4).map(([key, val]) => (
             <div
               key={key}
-              className="bg-surface-container rounded p-space-xs border border-surface-variant/30 flex items-center justify-between"
+              className="bg-surface-container rounded p-space-xs border border-surface-variant/30 min-w-0 flex flex-col overflow-hidden"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <div className="w-6 h-6 rounded bg-secondary-container/20 text-secondary flex items-center justify-center font-mono font-bold text-xs shrink-0">
                   +
                 </div>
-                <div className="flex flex-col overflow-hidden">
+                <div className="flex flex-col min-w-0 overflow-hidden flex-1">
                   <span className="font-label-xs text-label-xs text-outline uppercase font-mono truncate">
                     {key}
                   </span>
-                  <span className="font-code-sm text-code-sm text-on-surface font-mono truncate text-[10px]">
-                    {String(val).slice(0, 40)}
+                  <span className="font-mono text-xs break-all whitespace-pre-wrap max-h-20 overflow-y-auto min-w-0 text-on-surface">
+                    {String(val)}
                   </span>
                 </div>
+                <span className="text-secondary font-label-xs text-label-xs font-mono font-bold bg-secondary/10 px-1.5 py-0.5 rounded shrink-0 ml-1 self-start">
+                  GROWING
+                </span>
               </div>
-              <span className="text-secondary font-label-xs text-label-xs font-mono font-bold bg-secondary/10 px-1.5 py-0.5 rounded shrink-0 ml-1">
-                GROWING
-              </span>
             </div>
           ))}
         </div>

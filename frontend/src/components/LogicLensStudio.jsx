@@ -58,8 +58,10 @@ export default function LogicLensStudio({
           <LogicLensCodeViewer
             code={code}
             currentStep={currentStep}
+            steps={traceSteps}
             selectedLineNumber={selectedLineNumber}
             onSelectLine={setSelectedLineNumber}
+            onJumpToStep={onSelectStepIndex}
             onOpenSafeHookDrawer={handleJumpToSafeHook}
           />
         </div>

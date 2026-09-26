@@ -42,7 +42,7 @@ the kickoff prompt below. It never needs to guess where a stage ends.
 
 Tick these off manually as each stage is verified complete.
 
-- [x] Stage 1 — Monorepo & Deployment Scaffold
+- [ ] Stage 1 — Monorepo & Deployment Scaffold
 - [ ] Stage 2 — Frontend: Intake UI (mocked, no network)
 - [ ] Stage 3 — Backend: AST Control-Flow Pre-Pass
 - [ ] Stage 4 — Backend: Deterministic Tracer + Sandbox

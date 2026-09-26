@@ -4,7 +4,7 @@ import { LINE_EXPLANATIONS } from '../data/pipelineData';
 export default function LineExplainPanel({
   lineNumber,
   codeLine,
-  currentStep,
+  _currentStep,
   onClose,
   onApplyFix
 }) {

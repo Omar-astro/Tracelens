@@ -4,14 +4,19 @@ import LoopVisualizer from './LoopVisualizer';
 import BranchVisualizer from './BranchVisualizer';
 import StateBoard from './StateBoard';
 import HandoffDrawer from './HandoffDrawer';
+import BobExplainerPane from './BobExplainerPane';
+import MLAuditBanner from './MLAuditBanner';
+import MLRemediationPanel from './MLRemediationPanel';
+import HandoffSummaryPane from './HandoffSummaryPane';
 
 /**
  * TracePlayer — Stage 7: Studio Shell + Playback Scrubber.
+ * Stage 14: mounts the ModelLens risk banner and the audit / handoff-summary drawer tabs.
  *
  * 4-pane responsive layout:
  *   Left  (~40%)  : CodeViewer — read-only source with active-line highlight
  *   Center (~35%) : Visualizer canvas — placeholder (Stage 8)
- *   Right (~25%)  : Handoff / intent drawer — placeholder (Stage 10)
+ *   Right (~25%)  : Drawer — Bob Explainer / Safe Hooks / ModelLens audit / Handoff summary
  *
  * Playback state: currentStepIndex, isPlaying, playbackSpeed (0.5x / 1x / 2x)
  * Controls: step forward, step backward, play/pause, jump to start/end, free-scrub range slider
@@ -26,11 +31,59 @@ export default function TracePlayer({
   playbackSpeed,
   onChangePlaybackSpeed,
   safeInsertionPoints = [],
+  mode = 'logic_lens',
+  mlAuditIssues = [],
+  handoffSummary = null,
+  onHandoffSummaryGenerated,
 }) {
   // Stage 10: tracks which SafeInsertionPoint the user clicked in the gutter
   const [selectedSafePoint, setSelectedSafePoint] = useState(null);
+  // Stage 12: Drawer tab view ('explainer' | 'hooks' | 'split')
+  // Stage 14: adds 'audit' and 'summary'
+  const [drawerTab, setDrawerTab] = useState('explainer');
+  // Stage 14: tracks which MLAuditIssue the user clicked in the hazard gutter
+  const [selectedAuditIssue, setSelectedAuditIssue] = useState(null);
+
+  // When a new trace loads, drop any stale gutter selection so the drawer starts
+  // clean. Adjusted during render rather than in an effect to avoid a cascading
+  // second render pass.
+  const [tracedCode, setTracedCode] = useState(code);
+  if (tracedCode !== code) {
+    setTracedCode(code);
+    setSelectedAuditIssue(null);
+    setSelectedSafePoint(null);
+  }
+
+  // Stage 14: the ModelLens audit is only meaningful in model_lens mode.
+  const isModelLens = mode === 'model_lens';
+  const auditIssues = isModelLens ? mlAuditIssues : [];
+
+  // When a new trace loads, drop any stale selection so the drawer starts clean.
+  const handleGutterMarkerClick = useCallback((point) => {
+    setSelectedSafePoint(point);
+    setDrawerTab('hooks');
+  }, []);
+
+  const handleAuditMarkerClick = useCallback((issue) => {
+    setSelectedAuditIssue(issue);
+    setDrawerTab('audit');
+  }, []);
+
+  // Clicking a severity chip in the banner opens the audit drawer on that issue.
+  const handleBannerIssueSelect = useCallback((issue) => {
+    setSelectedAuditIssue(issue);
+    setDrawerTab('audit');
+  }, []);
+
   const totalSteps = traceSteps.length;
   const currentStep = traceSteps[currentStepIndex] ?? traceSteps[0];
+
+  // Terminal frame variables for the Appendix B.2 handoff prompt.
+  const terminalVariables = React.useMemo(() => {
+    const last = traceSteps[traceSteps.length - 1];
+    return last?.all_variables ?? {};
+  }, [traceSteps]);
+
 
   // ---------------------------------------------------------------------------
   // Auto-play timer
@@ -168,6 +221,13 @@ export default function TracePlayer({
   // ---------------------------------------------------------------------------
   return (
     <div className="flex flex-col w-full flex-1 overflow-hidden min-h-0">
+      {/* ── Stage 14: ModelLens Risk Banner (model_lens mode only) ─────────── */}
+      <MLAuditBanner
+        mode={mode}
+        issues={auditIssues}
+        onSelectIssue={handleBannerIssueSelect}
+      />
+
       {/* ── Playback Controls Dock ─────────────────────────────────────────── */}
       <section className="shrink-0 bg-slate-900 border-b border-slate-800 px-4 py-2.5">
         {/* Row 1: Buttons + speed + step counter */}
@@ -403,13 +463,163 @@ export default function TracePlayer({
           <StateBoard currentStep={currentStep} />
         </div>
 
-        {/* RIGHT (~25%): Stage 10 — HandoffDrawer with gutter safe-hook detail */}
-        <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[180px] flex flex-col overflow-hidden border-l border-slate-800 bg-slate-950/30">
-          <HandoffDrawer
-            selectedPoint={selectedSafePoint}
-            safeInsertionPoints={safeInsertionPoints}
-            onSelectPoint={setSelectedSafePoint}
-          />
+        {/* RIGHT (~25%): Stage 10, 12 & 14 — Drawer with Bob Explainer, Handoff Drawer,
+            ModelLens Remediation, and Handoff Summary */}
+        <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[240px] flex flex-col overflow-hidden border-l border-slate-800 bg-slate-950/30">
+          {/* Drawer View Navigation Tabs */}
+          <div className="shrink-0 flex items-center px-2 py-1.5 bg-slate-900 border-b border-slate-800">
+            <div className="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700/60 text-xs font-mono flex-wrap">
+              <button
+                type="button"
+                onClick={() => setDrawerTab('explainer')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                  drawerTab === 'explainer'
+                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="IBM Bob Line-by-Line Contextual Intent Explainer"
+              >
+                <span>⚡</span>
+                <span>Bob Explainer</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDrawerTab('hooks')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                  drawerTab === 'hooks'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Stage 10 Safe Insertion Hooks"
+              >
+                <span className="text-amber-400 font-bold leading-none">★</span>
+                <span>Safe Hooks</span>
+                {safeInsertionPoints.length > 0 && (
+                  <span className={`px-1 py-0.2 rounded text-[9px] ${
+                    drawerTab === 'hooks' ? 'bg-slate-950 text-amber-300' : 'bg-slate-900/80 text-slate-300'
+                  }`}>
+                    {safeInsertionPoints.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Stage 14: ModelLens remediation — only in model_lens mode */}
+              {isModelLens && (
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab('audit')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                    drawerTab === 'audit'
+                      ? 'bg-rose-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Stage 14 ModelLens Remediation — click a hazard marker in the gutter"
+                >
+                  <span className="text-rose-400 font-bold leading-none">☠</span>
+                  <span>Audit</span>
+                  {auditIssues.length > 0 && (
+                    <span className={`px-1 py-0.2 rounded text-[9px] ${
+                      drawerTab === 'audit' ? 'bg-slate-950 text-rose-200' : 'bg-slate-900/80 text-slate-300'
+                    }`}>
+                      {auditIssues.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setDrawerTab('summary')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                  drawerTab === 'summary'
+                    ? 'bg-indigo-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Stage 14 Appendix B.2 Teammate Handoff Summary"
+              >
+                📋 Summary
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDrawerTab('split')}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                  drawerTab === 'split'
+                    ? 'bg-indigo-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Stacked View: Bob Explainer and Safe Hooks"
+              >
+                Split
+              </button>
+            </div>
+          </div>
+
+          {/* Drawer Content */}
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            {drawerTab === 'explainer' && (
+              <BobExplainerPane
+                currentStep={currentStep}
+                currentStepIndex={currentStepIndex}
+                safeInsertionPoints={safeInsertionPoints}
+                onSelectSafePoint={(pt) => {
+                  setSelectedSafePoint(pt);
+                  setDrawerTab('hooks');
+                }}
+              />
+            )}
+
+            {drawerTab === 'hooks' && (
+              <HandoffDrawer
+                selectedPoint={selectedSafePoint}
+                safeInsertionPoints={safeInsertionPoints}
+                onSelectPoint={setSelectedSafePoint}
+              />
+            )}
+
+            {/* Stage 14: ModelLens remediation panel */}
+            {drawerTab === 'audit' && isModelLens && (
+              <MLRemediationPanel
+                issues={auditIssues}
+                selectedIssue={selectedAuditIssue}
+                onSelectIssue={setSelectedAuditIssue}
+              />
+            )}
+
+            {/* Stage 14: Appendix B.2 handoff summary (both modes) */}
+            {drawerTab === 'summary' && (
+              <HandoffSummaryPane
+                code={code}
+                safeInsertionPoints={safeInsertionPoints}
+                terminalVariables={terminalVariables}
+                summary={handoffSummary}
+                onSummaryGenerated={onHandoffSummaryGenerated}
+              />
+            )}
+
+            {drawerTab === 'split' && (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="h-1/2 min-h-[160px] border-b border-slate-800 overflow-hidden flex flex-col">
+                  <BobExplainerPane
+                    currentStep={currentStep}
+                    currentStepIndex={currentStepIndex}
+                    safeInsertionPoints={safeInsertionPoints}
+                    onSelectSafePoint={(pt) => {
+                      setSelectedSafePoint(pt);
+                    }}
+                  />
+                </div>
+                <div className="h-1/2 min-h-[160px] overflow-hidden flex flex-col">
+                  <HandoffDrawer
+                    selectedPoint={selectedSafePoint}
+                    safeInsertionPoints={safeInsertionPoints}
+                    onSelectPoint={setSelectedSafePoint}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

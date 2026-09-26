@@ -53,9 +53,9 @@ Tick these off manually as each stage is verified complete.
 - [x] Stage 9 — Backend: Safe Insertion Analyzer
 - [x] Stage 10 — Frontend: Gutter Markers + Handoff Drawer
 - [x] Stage 11 — Backend: IBM Bob Client + `/api/explain-step`
-- [ ] Stage 12 — Frontend: Bob Explainer Pane
-- [ ] Stage 13 — Backend: ModelLens Diagnostics Engine
-- [ ] Stage 14 — Frontend: ModelLens UI Overlay
+- [x] Stage 12 — Frontend: Bob Explainer Pane
+- [x] Stage 13 — Backend: ModelLens Diagnostics Engine
+- [x] Stage 14 — Frontend: ModelLens UI Overlay
 - [ ] Stage 15 — Polish, Demo Rehearsal, Deploy, Submission
 
 ---
@@ -667,9 +667,9 @@ prompt (Appendix B.2) for a full end-of-trace teammate handoff summary.
   stage before polish.
 
 ### Definition of Done
-- [ ] Tracing `dsai_leakage_sample.py` in ModelLens mode shows the risk banner and a hazard
+- [x] Tracing `dsai_leakage_sample.py` in ModelLens mode shows the risk banner and a hazard
       stripe on the leakage line; clicking it shows the corrected snippet.
-- [ ] The Handoff Summary view renders valid content for the `teammate_pipeline.py` sample.
+- [x] The Handoff Summary view renders valid content for the `teammate_pipeline.py` sample.
 
 ---
 

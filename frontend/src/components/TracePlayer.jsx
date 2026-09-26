@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import CodeViewer from './CodeViewer';
+import LoopVisualizer from './LoopVisualizer';
+import BranchVisualizer from './BranchVisualizer';
+import StateBoard from './StateBoard';
 
 /**
  * TracePlayer — Stage 7: Studio Shell + Playback Scrubber.
@@ -358,27 +361,35 @@ export default function TracePlayer({
 
       {/* ── 4-Pane Responsive Workspace ──────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden min-h-0">
-        {/* LEFT (~40%): Code Viewer */}
+        {/* LEFT (~40%): Code Viewer — passes skippedRange from active branch */}
         <div className="w-full lg:w-[40%] min-h-[320px] lg:min-h-0 min-w-[280px] flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-hidden">
           <CodeViewer
             code={code}
             currentStep={currentStep}
+            skippedRange={currentStep?.branch_context?.skipped_range ?? null}
           />
         </div>
 
-        {/* CENTER (~35%): Visualizer canvas — placeholder for Stage 8 */}
-        <div className="w-full lg:w-[35%] min-h-[220px] lg:min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-auto p-4 bg-slate-950/50">
-          {/* TODO(stage-8): render LoopVisualizer / BranchVisualizer / StateBoard here */}
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-600">
-            <svg className="w-10 h-10 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M8 12h8M12 8v8" />
-            </svg>
-            <p className="text-xs font-mono text-center">
-              Visualizer Canvas<br />
-              <span className="text-slate-700">(Stage 8: Loop / Branch / State)</span>
-            </p>
-          </div>
+        {/* CENTER (~35%): Stage 8 Visualizer Canvas */}
+        <div className="w-full lg:w-[35%] min-h-[220px] lg:min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-auto p-3 gap-3 bg-slate-950/50">
+          {/* LoopVisualizer — shown when step has loop_context */}
+          {currentStep?.loop_context && (
+            <LoopVisualizer
+              currentStep={currentStep}
+              allSteps={traceSteps}
+              currentStepIndex={currentStepIndex}
+              onJumpToIteration={onSelectStepIndex}
+              onJumpToLoopExit={handleJumpToLoopEnd}
+            />
+          )}
+
+          {/* BranchVisualizer — shown when step has branch_context */}
+          {currentStep?.branch_context && (
+            <BranchVisualizer currentStep={currentStep} />
+          )}
+
+          {/* StateBoard — always shown */}
+          <StateBoard currentStep={currentStep} />
         </div>
 
         {/* RIGHT (~25%): Handoff / intent drawer — placeholder for Stage 10 */}

@@ -49,7 +49,7 @@ Tick these off manually as each stage is verified complete.
 - [x] Stage 5 — Backend: Real `/api/trace` Endpoint
 - [x] Stage 6 — Frontend↔Backend Tunnel (replace mock with real API)
 - [x] Stage 7 — Frontend: Studio Shell + Playback Scrubber
-- [ ] Stage 8 — Frontend: Manual Visualizers (Loop / Branch / State)
+- [x] Stage 8 — Frontend: Manual Visualizers (Loop / Branch / State)
 - [ ] Stage 9 — Backend: Safe Insertion Analyzer
 - [ ] Stage 10 — Frontend: Gutter Markers + Handoff Drawer
 - [x] Stage 11 — Backend: IBM Bob Client + `/api/explain-step`

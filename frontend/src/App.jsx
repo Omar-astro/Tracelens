@@ -138,7 +138,7 @@ export default function App() {
       <CodeInputPane mode={mode} onTraceComplete={handleTraceComplete} />
 
       <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 7 Studio Shell Active
+        TraceLens • Stage 8 Visualizers Active
       </footer>
     </main>
   );

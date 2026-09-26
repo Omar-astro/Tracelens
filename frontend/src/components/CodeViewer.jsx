@@ -91,6 +91,7 @@ export default function CodeViewer({
   safeInsertionPoints = [],
   selectedSafePoint = null,
   onGutterMarkerClick = null,
+  onLineClick = null,
 }) {
   // Build a fast lookup: lineNumber → SafeInsertionPoint
   const safeLineMap = React.useMemo(() => {
@@ -145,7 +146,10 @@ export default function CodeViewer({
               ref={(el) => {
                 if (el) lineRefs.current[lineNum] = el;
               }}
+              onClick={() => onLineClick && onLineClick(lineNum)}
               className={`flex items-stretch min-w-max transition-colors duration-100 ${
+                onLineClick ? 'cursor-pointer' : ''
+              } ${
                 isActive
                   ? 'bg-cyan-500/15 border-l-2 border-cyan-400 shadow-sm'
                   : isSkipped

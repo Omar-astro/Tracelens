@@ -208,10 +208,8 @@ def _resolve_tracer(tracer_ref: str) -> TracerFactory:
     except ModuleNotFoundError:
         if module_name.startswith("backend."):
             mod = importlib.import_module(module_name[len("backend."):])
-        elif not module_name.startswith("backend."):
-            mod = importlib.import_module(f"backend.{module_name}")
         else:
-            raise
+            mod = importlib.import_module(f"backend.{module_name}")
     factory = getattr(mod, attr)
     if not callable(factory):
         raise TypeError(f"Tracer factory {tracer_ref!r} is not callable")

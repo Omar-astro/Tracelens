@@ -37,7 +37,7 @@ class StepLimitReached(Exception):
 # Constants
 # ---------------------------------------------------------------------------
 FAKE_FILENAME = "<tracelens_user_code>"
-_REPR_MAX = 110   # max chars for repr_str / all_variables values
+_REPR_MAX = 500   # max chars for repr_str / all_variables values
 
 # ---------------------------------------------------------------------------
 # JSON-safe serializer

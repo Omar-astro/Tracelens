@@ -340,14 +340,14 @@ export default function TracePlayer({
             {/* Active gradient fill */}
             <div
               className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 rounded-full transition-all duration-100 shadow-[0_0_10px_rgba(6,182,212,0.5)]"
-              style={{ width: `${Math.max(1, Math.min(100, ((currentStepIndex + 1) / totalSteps) * 100))}%` }}
+              style={{ width: `${totalSteps <= 1 ? 100 : (currentStepIndex / (totalSteps - 1)) * 100}%` }}
             />
           </div>
 
           {/* Interactive thumb marker */}
           <div
             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-cyan-400 border-2 border-slate-950 shadow-[0_0_8px_#22d3ee] pointer-events-none transition-all duration-100"
-            style={{ left: `${Math.max(1, Math.min(99, ((currentStepIndex + 1) / totalSteps) * 100))}%` }}
+            style={{ left: `${totalSteps <= 1 ? 0 : (currentStepIndex / (totalSteps - 1)) * 100}%` }}
           />
 
           {/* Full overlay invisible range input for native dragging, accessibility & touch */}
@@ -374,6 +374,10 @@ export default function TracePlayer({
             safeInsertionPoints={safeInsertionPoints}
             selectedSafePoint={selectedSafePoint}
             onGutterMarkerClick={setSelectedSafePoint}
+            onLineClick={(lineNum) => {
+              const idx = traceSteps.findIndex(s => s.line_number === lineNum);
+              if (idx !== -1) onSelectStepIndex(idx);
+            }}
           />
         </div>
 

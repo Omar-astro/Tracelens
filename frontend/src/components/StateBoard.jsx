@@ -5,11 +5,18 @@ export default function StateBoard({ currentStep }) {
   const [expandedVar, setExpandedVar] = useState(null);
 
   const deltas = currentStep?.variable_deltas || {};
-  const deltaKeys = Object.keys(deltas);
+  // Filter out any import — modules, classes, functions, builtins all produce a
+  // repr_str that starts with '<'. User data never looks like that.
+  const isImportDelta = (d) =>
+    typeof d.repr_str === 'string' && d.repr_str.startsWith('<');
+  const deltaKeys = Object.keys(deltas).filter((k) => !isImportDelta(deltas[k]));
 
   const allVars = currentStep?.all_variables || {};
-  const varEntries = Object.entries(allVars).filter(([key]) =>
-    key.toLowerCase().includes(searchTerm.toLowerCase())
+  // Same rule for the scope snapshot: drop anything whose repr starts with '<'.
+  const isImportVar = (val) => typeof val === 'string' && val.startsWith('<');
+  const varEntries = Object.entries(allVars).filter(
+    ([key, val]) =>
+      !isImportVar(val) && key.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (

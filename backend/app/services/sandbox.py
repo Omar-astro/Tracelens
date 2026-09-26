@@ -44,7 +44,7 @@ except ImportError:  # POSIX only; Windows has no resource module.
 TRACELENS_FILENAME = "<tracelens_user_code>"
 
 SANDBOX_TIMEOUT_SECONDS = 8.0
-MAX_STEPS_DEFAULT = 300
+MAX_STEPS_DEFAULT = 1000
 MEMORY_LIMIT_MB = 256
 STDOUT_LIMIT_CHARS = 64 * 1024
 PREVIEW_ITEMS = 3

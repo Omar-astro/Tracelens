@@ -65,7 +65,7 @@ export default function MLRemediationPanel({
   // ── Empty state ──────────────────────────────────────────────────────────
   if (issues.length === 0) {
     return (
-      <div className="flex flex-col h-full p-4 gap-3">
+      <div className="flex flex-col h-full gap-3">
         <PanelHeader issueCount={0} />
         <div className="flex flex-col items-center justify-center flex-1 gap-2 text-slate-600 text-center px-4">
           <span className="text-2xl" aria-hidden="true">
@@ -85,7 +85,7 @@ export default function MLRemediationPanel({
 
   if (!selectedIssue) {
     return (
-      <div className="flex flex-col h-full p-4 gap-3">
+      <div className="flex flex-col h-full gap-3">
         <PanelHeader issueCount={issues.length} />
         <div className="flex flex-col items-center justify-center flex-1 gap-2 text-slate-600 text-center px-4">
           <span className="text-2xl" aria-hidden="true">
@@ -101,7 +101,9 @@ export default function MLRemediationPanel({
         </div>
 
         {/* Full issue index so the panel is useful before any marker is clicked */}
-        <IssueIndex issues={issues} onSelectIssue={onSelectIssue} />
+        <div className="px-4 pb-4">
+          <IssueIndex issues={issues} onSelectIssue={onSelectIssue} />
+        </div>
       </div>
     );
   }
@@ -111,7 +113,7 @@ export default function MLRemediationPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <PanelHeader issueCount={issues.length} />
+      <PanelHeader issueCount={issues.length} onBack={() => onSelectIssue && onSelectIssue(null)} />
 
       {/* Prev / next navigation */}
       <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-1.5 bg-slate-900/60 border-b border-slate-800">
@@ -197,10 +199,20 @@ export default function MLRemediationPanel({
 
 /* ── Sub-components ─────────────────────────────────────────────────────── */
 
-function PanelHeader({ issueCount }) {
+function PanelHeader({ issueCount, onBack }) {
   return (
-    <div className="shrink-0 flex items-center justify-between border-b border-slate-800 pb-2">
+    <div className="shrink-0 flex items-center justify-between border-b border-slate-800 px-4 pt-4 pb-2.5">
       <div className="flex items-center gap-2">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-slate-400 hover:text-slate-200 text-xs font-mono px-1.5 py-0.5 rounded hover:bg-slate-800 transition-colors mr-1 cursor-pointer"
+            title="Back to all findings"
+          >
+            ←
+          </button>
+        )}
         <span className="text-rose-400 font-bold text-base leading-none" aria-hidden="true">
           ☠
         </span>

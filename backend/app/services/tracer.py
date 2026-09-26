@@ -222,13 +222,22 @@ def _diff_locals(
         else:
             old_val = prev[key]
             new_val = curr_visible[key]
-            # Try equality; fall back to repr comparison for NumPy etc.
+            # Try equality; fall back to repr comparison for NumPy/pandas etc.
             try:
                 np = sys.modules.get("numpy")
+                pd = sys.modules.get("pandas")
                 if np is not None and isinstance(new_val, np.ndarray):
                     changed = not np.array_equal(old_val, new_val)
+                elif pd is not None and isinstance(new_val, (pd.DataFrame, pd.Series)):
+                    changed = _safe_repr(old_val) != _safe_repr(new_val)
                 else:
-                    changed = old_val != new_val
+                    result = old_val != new_val
+                    # Guard against objects (e.g. pandas) that return a
+                    # non-scalar from __ne__ — fall back to repr comparison.
+                    if not isinstance(result, bool):
+                        changed = _safe_repr(old_val) != _safe_repr(new_val)
+                    else:
+                        changed = result
             except Exception:
                 changed = _safe_repr(old_val) != _safe_repr(new_val)
 

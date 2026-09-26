@@ -11,7 +11,7 @@ export default function BranchVisualizer({ currentStep }) {
           <span className="font-headline-sm text-headline-sm">Branch Decision Evaluator</span>
         </div>
         <span className="text-outline font-label-xs text-label-xs font-mono">
-          Sequential execution (No active branch condition on Line {currentStep?.line_number || '-'})
+          Sequential execution (No active branch on line {currentStep?.line_number || '–'})
         </span>
       </div>
     );
@@ -22,13 +22,13 @@ export default function BranchVisualizer({ currentStep }) {
     evaluated_truth,
     taken_line,
     skipped_range,
-    reason
+    header_line,
   } = branchContext;
 
   return (
     <div className={`rounded-lg p-space-md border shadow-md flex flex-col gap-space-xs transition-all ${
-      evaluated_truth 
-        ? 'bg-secondary-container/10 border-secondary/40' 
+      evaluated_truth
+        ? 'bg-secondary-container/10 border-secondary/40'
         : 'bg-error-container/10 border-error/40'
     }`}>
       {/* Header */}
@@ -43,7 +43,7 @@ export default function BranchVisualizer({ currentStep }) {
             Branch Decision Evaluator
           </h3>
           <span className="font-code-sm text-code-sm text-outline font-mono">
-            `Line {branchContext.header_line}`
+            `Line {header_line}`
           </span>
         </div>
 
@@ -56,14 +56,14 @@ export default function BranchVisualizer({ currentStep }) {
             <span className="material-symbols-outlined text-[13px]">
               {evaluated_truth ? 'check_circle' : 'cancel'}
             </span>
-            {evaluated_truth ? 'TRUE / BRANCH TAKEN' : 'FALSE / BRANCH SKIPPED'}
+            {evaluated_truth ? 'TRUE / TAKEN' : 'FALSE / SKIPPED'}
           </span>
         </div>
       </div>
 
-      {/* Condition & Expression Breakdown */}
+      {/* Condition Expression */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-space-sm items-center bg-surface-container-lowest p-space-sm rounded border border-surface-variant/30 font-mono">
-        <div className="md:col-span-6 flex flex-col gap-0.5">
+        <div className="md:col-span-7 flex flex-col gap-0.5">
           <span className="text-[10px] text-outline uppercase tracking-wider">
             AST CONDITIONAL EXPRESSION
           </span>
@@ -72,12 +72,16 @@ export default function BranchVisualizer({ currentStep }) {
           </div>
         </div>
 
-        <div className="md:col-span-6 flex flex-col gap-0.5">
+        <div className="md:col-span-5 flex flex-col gap-0.5">
           <span className="text-[10px] text-outline uppercase tracking-wider">
-            DETERMINISTIC EVALUATION OUTCOME
+            RUNTIME RESULT
           </span>
-          <div className="font-code-sm text-code-sm text-on-surface bg-surface-container px-2 py-1 rounded border border-outline-variant/30">
-            {reason}
+          <div className={`font-code-sm text-code-sm px-2 py-1 rounded border font-bold ${
+            evaluated_truth
+              ? 'bg-secondary/10 border-secondary/30 text-secondary'
+              : 'bg-error/10 border-error/30 text-error'
+          }`}>
+            {evaluated_truth ? 'True' : 'False'}
           </div>
         </div>
       </div>
@@ -92,7 +96,12 @@ export default function BranchVisualizer({ currentStep }) {
         {skipped_range && (
           <div className="flex items-center gap-1 text-error font-mono">
             <span className="material-symbols-outlined text-[14px]">block</span>
-            <span>Bypassed lines: <strong className="underline">Lines {skipped_range[0]}..{skipped_range[1]}</strong></span>
+            <span>
+              Dimmed in viewer:{' '}
+              <strong className="underline">
+                Lines {skipped_range[0]}..{skipped_range[1]}
+              </strong>
+            </span>
           </div>
         )}
       </div>

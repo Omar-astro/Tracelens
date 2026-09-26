@@ -83,7 +83,7 @@ function highlightPythonLine(line) {
   return elements.length > 0 ? elements : line;
 }
 
-export default function CodeViewer({ code, currentStep }) {
+export default function CodeViewer({ code, currentStep, skippedRange = null }) {
   const activeLine = currentStep?.line_number ?? null;
   const lines = code ? code.split('\n') : [];
 
@@ -116,6 +116,10 @@ export default function CodeViewer({ code, currentStep }) {
         {lines.map((rawLine, idx) => {
           const lineNum = idx + 1;
           const isActive = lineNum === activeLine;
+          const isSkipped =
+            skippedRange != null &&
+            lineNum >= skippedRange[0] &&
+            lineNum <= skippedRange[1];
 
           return (
             <div
@@ -126,13 +130,19 @@ export default function CodeViewer({ code, currentStep }) {
               className={`flex items-stretch min-w-max transition-colors duration-100 ${
                 isActive
                   ? 'bg-cyan-500/15 border-l-2 border-cyan-400 shadow-sm'
-                  : 'border-l-2 border-transparent hover:bg-slate-800/40'
+                  : isSkipped
+                    ? 'bg-red-950/20 border-l-2 border-red-800/40 opacity-40'
+                    : 'border-l-2 border-transparent hover:bg-slate-800/40'
               }`}
             >
               {/* Gutter: line number */}
               <div
                 className={`shrink-0 w-10 text-right pr-2 py-0.5 select-none font-mono text-[11px] ${
-                  isActive ? 'text-cyan-400 font-bold bg-cyan-950/40' : 'text-slate-600 bg-slate-900/40'
+                  isActive
+                    ? 'text-cyan-400 font-bold bg-cyan-950/40'
+                    : isSkipped
+                      ? 'text-red-700 bg-slate-900/40'
+                      : 'text-slate-600 bg-slate-900/40'
                 }`}
                 aria-hidden="true"
               >
@@ -146,7 +156,7 @@ export default function CodeViewer({ code, currentStep }) {
               {/* Code text with syntax tokenization */}
               <pre
                 className={`flex-1 py-0.5 pr-4 whitespace-pre font-mono ${
-                  isActive ? 'text-slate-100' : 'text-slate-300'
+                  isActive ? 'text-slate-100' : isSkipped ? 'text-slate-600' : 'text-slate-300'
                 }`}
               >
                 {highlightPythonLine(rawLine)}

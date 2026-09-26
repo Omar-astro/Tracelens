@@ -1,8 +1,23 @@
 import React, { useState } from 'react';
 
-export default function StateBoard({ currentStep }) {
+export default function StateBoard({ currentStep, traceSteps = [], onJumpToStep = null }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedVar, setExpandedVar] = useState(null);
+
+  // Build varName → first step index where that variable was created.
+  // Computed once per trace (traceSteps is stable between steps).
+  const varBirthMap = React.useMemo(() => {
+    const map = {};
+    traceSteps.forEach((step, idx) => {
+      const deltas = step.variable_deltas || {};
+      Object.values(deltas).forEach((d) => {
+        if (d.action === 'created' && !(d.var_name in map)) {
+          map[d.var_name] = idx;
+        }
+      });
+    });
+    return map;
+  }, [traceSteps]);
 
   const deltas = currentStep?.variable_deltas || {};
   // Filter out any import — modules, classes, functions, builtins all produce a
@@ -154,21 +169,31 @@ export default function StateBoard({ currentStep }) {
               No matching variables in current frame scope.
             </div>
           ) : (
-            varEntries.map(([key, val]) => (
-              <div
-                key={key}
-                onClick={() => setExpandedVar(expandedVar === key ? null : key)}
-                className="grid grid-cols-12 px-2 py-1.5 border-b border-surface-variant/15 hover:bg-surface-container/40 transition-colors items-start cursor-pointer min-w-0"
-              >
-                <div className="col-span-4 flex items-center gap-1 font-semibold text-primary truncate min-w-0">
-                  <span className="material-symbols-outlined text-[12px] text-outline shrink-0">data_object</span>
-                  <span className="truncate">{key}</span>
+            varEntries.map(([key, val]) => {
+              const birthIdx = varBirthMap[key] ?? null;
+              const canJump = onJumpToStep !== null && birthIdx !== null;
+              return (
+                <div
+                  key={key}
+                  onClick={() => canJump ? onJumpToStep(birthIdx) : setExpandedVar(expandedVar === key ? null : key)}
+                  title={canJump ? `Jump to step where ${key} was created` : undefined}
+                  className="grid grid-cols-12 px-2 py-1.5 border-b border-surface-variant/15 hover:bg-surface-container/40 transition-colors items-start cursor-pointer min-w-0"
+                >
+                  <div className="col-span-4 flex items-center gap-1 font-semibold text-primary truncate min-w-0">
+                    <span className="material-symbols-outlined text-[12px] text-outline shrink-0">data_object</span>
+                    <span className="truncate">{key}</span>
+                    {canJump && (
+                      <span className="shrink-0 text-[9px] font-mono text-outline opacity-50 group-hover:opacity-100">
+                        ⬆{birthIdx + 1}
+                      </span>
+                    )}
+                  </div>
+                  <div className="col-span-8 font-mono text-xs break-all whitespace-pre-wrap max-h-20 overflow-y-auto min-w-0 text-on-surface-variant">
+                    {val}
+                  </div>
                 </div>
-                <div className="col-span-8 font-mono text-xs break-all whitespace-pre-wrap max-h-20 overflow-y-auto min-w-0 text-on-surface-variant">
-                  {val}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

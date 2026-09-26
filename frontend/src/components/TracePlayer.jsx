@@ -420,7 +420,11 @@ export default function TracePlayer({
           )}
 
           {/* StateBoard — always shown */}
-          <StateBoard currentStep={currentStep} />
+          <StateBoard
+            currentStep={currentStep}
+            traceSteps={traceSteps}
+            onJumpToStep={onSelectStepIndex}
+          />
         </div>
 
         {/* RIGHT (~25%): Stage 10, 12 & 14 — Drawer with Bob Explainer, Handoff Drawer,

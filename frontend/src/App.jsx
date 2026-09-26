@@ -16,21 +16,32 @@ export default function App() {
 
   // Trace state lifted from CodeInputPane via onTraceComplete
   const [traceSteps, setTraceSteps] = useState(null);               // TraceStep[] | null
-  const [sourceCode, setSourceCode] = useState('');                 // last traced source
+  const [sourceCode, setSourceCode] = useState('');                 // last traced source.
   const [safeInsertionPoints, setSafeInsertionPoints] = useState([]); // Stage 10
+  // Stage 14: ModelLens audit issues from the Stage 13 engine (model_lens mode only)
+  const [mlAuditIssues, setMlAuditIssues] = useState([]);
+  // Stage 14: Appendix B.2 handoff summary — cached one-per-trace so the drawer
+  // renders instantly on re-open and never re-calls the LLM.
+  const [handoffSummary, setHandoffSummary] = useState(null);
 
   // Playback state lives here so it persists when navigating back to intake
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  const handleTraceComplete = useCallback((steps, code, safePoints = []) => {
+  const handleTraceComplete = useCallback((steps, code, safePoints = [], mlIssues = []) => {
     setTraceSteps(steps);
     setSourceCode(code);
     setSafeInsertionPoints(safePoints);
+    setMlAuditIssues(Array.isArray(mlIssues) ? mlIssues : []);
+    setHandoffSummary(null);
     setCurrentStepIndex(0);
     setIsPlaying(false);
     setView('studio');
+  }, []);
+
+  const handleHandoffSummaryGenerated = useCallback((summary) => {
+    setHandoffSummary(summary);
   }, []);
 
   const handleBackToIntake = useCallback(() => {
@@ -108,6 +119,10 @@ export default function App() {
           playbackSpeed={playbackSpeed}
           onChangePlaybackSpeed={setPlaybackSpeed}
           safeInsertionPoints={safeInsertionPoints}
+          mode={mode}
+          mlAuditIssues={mlAuditIssues}
+          handoffSummary={handoffSummary}
+          onHandoffSummaryGenerated={handleHandoffSummaryGenerated}
         />
       </main>
     );
@@ -138,10 +153,14 @@ export default function App() {
       <ModeSelector mode={mode} onChange={setMode} />
 
       {/* Code Input Pane — wired to real backend */}
-      <CodeInputPane mode={mode} onTraceComplete={handleTraceComplete} />
+      <CodeInputPane
+        mode={mode}
+        onTraceComplete={handleTraceComplete}
+        onRequestMode={setMode}
+      />
 
       <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 12 Bob Explainer Pane Active
+        TraceLens • Stage 14 ModelLens UI Active
       </footer>
     </main>
   );

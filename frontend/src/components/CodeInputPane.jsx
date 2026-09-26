@@ -33,7 +33,27 @@ summary = {
 print("Summary:", summary)
 `;
 
-export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete }) {
+// Appendix C.2 — dsai_leakage_sample.py (Mode 2 secondary demo sample).
+// NOTE: no leading or trailing blank line. The backend strips the source before
+// ast.parse (see trace.py) while CodeViewer renders it verbatim, so any leading
+// blank line would shift every reported line_number by one.
+const DSAI_LEAKAGE_SAMPLE = `# dsai_leakage_sample.py — Inherited from "Jordan" (Data Scientist)
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+X = np.random.randn(100, 4)
+y = np.array([0] * 90 + [1] * 10)
+
+# BUG: Data Leakage — Fitting scaler across entire dataset before splitting!
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+
+print("Dataset ready. Train size:", len(X_train))`;
+
+export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, onRequestMode }) {
   // Tabs: 'editor' (Tab A), 'dropzone' (Tab B), 'sample' (Tab C)
   const [activeTab, setActiveTab] = useState('editor');
   const [code, setCode] = useState('');
@@ -60,6 +80,14 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete }) 
     setCode(TEAMMATE_PIPELINE_SAMPLE);
     setLoadedFileName('teammate_pipeline.py');
     setActiveTab('editor');
+  };
+
+  // Stage 14: Appendix C.2 ModelLens sample — switch the caller to ModelLens mode too
+  const handleLoadLeakageSample = () => {
+    setCode(DSAI_LEAKAGE_SAMPLE);
+    setLoadedFileName('dsai_leakage_sample.py');
+    setActiveTab('editor');
+    if (onRequestMode) onRequestMode('model_lens');
   };
 
   // Process file upload (.py or .ipynb)
@@ -109,15 +137,17 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete }) 
 
     try {
       const response = await postTrace(code, mode);
-      // traceClient now always returns { steps: TraceStep[], safe_insertion_points: [...] }
+      // Backend returns { steps, safe_insertion_points, ml_audit_issues? }
       const steps = response.steps ?? [];
       // Stage 10: safe insertion points from backend (Stage 9)
       const safePoints = response.safe_insertion_points ?? [];
+      // Stage 14: ModelLens audit issues — only present in model_lens mode
+      const mlIssues = response.ml_audit_issues ?? [];
       setTraceSteps(steps);
       if (onTraceComplete) {
-        onTraceComplete(steps, code, safePoints);
+        onTraceComplete(steps, code, safePoints, mlIssues);
       }
-      console.log('Trace complete —', steps.length, 'steps,', safePoints.length, 'safe insertion points');
+      console.log('Trace complete —', steps.length, 'steps,', safePoints.length, 'safe insertion points,', mlIssues.length, 'ML audit issues');
     } catch (err) {
       const message =
         err instanceof TraceApiError
@@ -259,27 +289,58 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete }) 
 
       {/* Tab C: Sample Teammate Script Details & Loader */}
       {activeTab === 'sample' && (
-        <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/60 text-left">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-200">
-                Appendix C.1: teammate_pipeline.py
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Inherited script from teammate Alex with loop sanitization, error counting, and safe hook point.
-              </p>
+        <div className="flex flex-col gap-4 text-left">
+          {/* Appendix C.1 — Mode 1 primary demo */}
+          <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/60">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-200">
+                  Appendix C.1: teammate_pipeline.py
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Inherited script from teammate Alex with loop sanitization, error counting, and safe hook point.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLoadSample}
+                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Load Sample Teammate Script
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleLoadSample}
-              className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Load Sample Teammate Script
-            </button>
+            <pre className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto leading-5">
+              {TEAMMATE_PIPELINE_SAMPLE}
+            </pre>
           </div>
-          <pre className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto leading-5">
-            {TEAMMATE_PIPELINE_SAMPLE}
-          </pre>
+
+          {/* Appendix C.2 — Stage 14: Mode 2 secondary demo */}
+          <div className="p-5 rounded-xl border border-rose-900/50 bg-rose-950/10">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                  Appendix C.2: dsai_leakage_sample.py
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded">
+                    ModelLens
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Inherited from Jordan (Data Scientist). Deliberate data leakage — the scaler is fitted across the
+                  full dataset before the split. Switches the mode selector to ModelLens.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLoadLeakageSample}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0"
+              >
+                Load Leakage Sample
+              </button>
+            </div>
+            <pre className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto leading-5">
+              {DSAI_LEAKAGE_SAMPLE}
+            </pre>
+          </div>
         </div>
       )}
 

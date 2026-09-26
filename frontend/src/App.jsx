@@ -3,10 +3,23 @@ import ModeSelector from './components/ModeSelector';
 import CodeInputPane from './components/CodeInputPane';
 
 /**
- * TraceLens App - Stage 2: Frontend Intake UI (mocked, no network)
+ * TraceLens App — Stage 6: Frontend↔Backend Tunnel.
+ *
+ * Lifts traceSteps and sourceCode state to App level so Stage 7
+ * (Studio Shell) can render them without re-fetching.
  */
 export default function App() {
   const [mode, setMode] = useState('logic_lens');
+
+  // Stage 6: lifted trace state (populated by CodeInputPane via onTraceComplete)
+  // TODO(stage-7): use _traceSteps + _sourceCode to render the Studio workspace
+  const [_traceSteps, setTraceSteps] = useState(null);   // TraceStep[] | null
+  const [_sourceCode, setSourceCode] = useState('');     // last traced source
+
+  const handleTraceComplete = (steps, code) => {
+    setTraceSteps(steps);
+    setSourceCode(code);
+  };
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center py-10 px-4 sm:px-6 font-sans">
@@ -14,7 +27,7 @@ export default function App() {
       <header className="max-w-4xl w-full text-center mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-mono mb-4">
           <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-          TraceLens — Runtime Flow & Auditor
+          TraceLens — Runtime Flow &amp; Auditor
         </div>
 
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-3 bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">
@@ -26,15 +39,17 @@ export default function App() {
         </p>
       </header>
 
-      {/* Mode Selector (Stage 2) */}
+      {/* Mode Selector */}
       <ModeSelector mode={mode} onChange={setMode} />
 
-      {/* Code Input Pane (Stage 2) */}
-      <CodeInputPane mode={mode} />
+      {/* Code Input Pane — Stage 6: wired to real backend */}
+      <CodeInputPane mode={mode} onTraceComplete={handleTraceComplete} />
+
+      {/* TODO(stage-7): render Studio workspace when traceSteps is set */}
 
       {/* Footer info */}
       <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 2 Intake Screen • No network calls active
+        TraceLens • Stage 6 Tunnel Active
       </footer>
     </main>
   );

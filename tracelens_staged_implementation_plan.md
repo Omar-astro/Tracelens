@@ -46,8 +46,8 @@ Tick these off manually as each stage is verified complete.
 - [x] Stage 2 — Frontend: Intake UI (mocked, no network)
 - [x] Stage 3 — Backend: AST Control-Flow Pre-Pass
 - [x] Stage 4 — Backend: Deterministic Tracer + Sandbox
-- [ ] Stage 5 — Backend: Real `/api/trace` Endpoint
-- [ ] Stage 6 — Frontend↔Backend Tunnel (replace mock with real API)
+- [x] Stage 5 — Backend: Real `/api/trace` Endpoint
+- [x] Stage 6 — Frontend↔Backend Tunnel (replace mock with real API)
 - [ ] Stage 7 — Frontend: Studio Shell + Playback Scrubber
 - [ ] Stage 8 — Frontend: Manual Visualizers (Loop / Branch / State)
 - [ ] Stage 9 — Backend: Safe Insertion Analyzer

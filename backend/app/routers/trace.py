@@ -1,12 +1,13 @@
 """
-trace.py — Stage 5: Real /api/trace Endpoint.
+trace.py — Stage 5 & 9: Real /api/trace Endpoint with Safe Insertion Analyzer.
 
-Replaces the Stage 1 mock with the real execution tracing pipeline:
+Execution tracing pipeline:
 1. Ingestion and source code normalization.
 2. AST control-flow pre-pass (ast_flow.py) to validate syntax and index loop/branch headers.
 3. Sandboxed deterministic execution tracer (sandbox.py + tracer.py) under strict resource
    limits, timeouts, and restricted builtins.
 4. Schema-compliant response conforming field-for-field to TraceStep (Appendix A).
+5. Safe Insertion Analyzer (handoff_analyzer.py) computing variable lifecycles and safe hooks.
 """
 
 from typing import Any, Dict, List, Literal, Optional
@@ -25,6 +26,10 @@ try:
         ERR_SYNTAX,
         ERR_BLOCKED_IMPORT,
     )
+    from backend.app.services.handoff_analyzer import (
+        SafeInsertionPoint,
+        find_safe_insertion_points,
+    )
 except ImportError:
     from app.services.ast_flow import build_flow_index
     from app.services.sandbox import (
@@ -36,6 +41,10 @@ except ImportError:
         ERR_MAX_STEPS,
         ERR_SYNTAX,
         ERR_BLOCKED_IMPORT,
+    )
+    from app.services.handoff_analyzer import (
+        SafeInsertionPoint,
+        find_safe_insertion_points,
     )
 
 router = APIRouter(prefix="/api", tags=["Trace"])
@@ -112,17 +121,31 @@ class TraceRequest(BaseModel):
     max_steps: Optional[int] = None
 
 
+class TraceResponse(BaseModel):
+    steps: List[TraceStep]
+    safe_insertion_points: List[SafeInsertionPoint] = Field(default_factory=list)
+
+    def __iter__(self):
+        return iter(self.steps)
+
+    def __getitem__(self, item):
+        return self.steps[item]
+
+    def __len__(self):
+        return len(self.steps)
+
+
 # ---------------------------------------------------------------------------
 # Endpoint Implementation
 # ---------------------------------------------------------------------------
 
 
-@router.post("/trace", response_model=List[TraceStep])
-def trace_code(payload: TraceRequest) -> List[TraceStep]:
-    """Execute Python code in the sandbox and return a list of TraceSteps."""
+@router.post("/trace", response_model=TraceResponse)
+def trace_code(payload: TraceRequest) -> TraceResponse:
+    """Execute Python code in the sandbox, extract Safe Insertion Points, and return TraceResponse."""
     raw_code = payload.code
     if not isinstance(raw_code, str) or not raw_code.strip():
-        return []
+        return TraceResponse(steps=[], safe_insertion_points=[])
 
     # Strip and normalize incoming code
     code = raw_code.replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -190,6 +213,12 @@ def trace_code(payload: TraceRequest) -> List[TraceStep]:
             detail=res.error or "Execution error in sandbox.",
         )
 
-    # TODO(stage-9): Compute safe insertion points and attach to response schema
+    # Compute safe insertion points across completed trace (Stage 9)
+    safe_points = find_safe_insertion_points(res.steps, code)
 
-    return [TraceStep.model_validate(step) for step in res.steps]
+    # TODO(stage-13): Attach ml_audit_issues when mode == "model_lens"
+
+    return TraceResponse(
+        steps=[TraceStep.model_validate(step) for step in res.steps],
+        safe_insertion_points=safe_points,
+    )

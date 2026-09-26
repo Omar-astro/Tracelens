@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { explainStep } from '../api/traceClient';
 import { explanationCache, pendingRequests } from '../api/explanationCache';
 
@@ -13,7 +13,9 @@ import { explanationCache, pendingRequests } from '../api/explanationCache';
  *   - continuation_tip: concrete guidance on where and how to extend logic
  *
  * Features:
- *   - Per-step caching keyed by step_id (scrubbing does not spam the API)
+ *   - Explicit "Explain with Bob" button — no API call fires until the user
+ *     clicks it, preventing wasteful requests while scrubbing the trace.
+ *   - Per-step caching keyed by step_id (subsequent visits to a step are free)
  *   - Cache status indicator (⚡ Cached vs Live AI)
  *   - Graceful loading skeleton and retry button on network errors
  *   - Integration with Stage 10 safe insertion points on the current line
@@ -40,6 +42,14 @@ export default function BobExplainerPane({
     error: null,
   });
 
+  // 3. Whether the user has requested an explanation for the current stepId.
+  //    Resets to false whenever stepId changes so the button reappears on new steps
+  //    (unless that step is already cached).
+  const [explainRequested, setExplainRequested] = useState(false);
+
+  // Keep track of the last stepId we reset the flag for
+  const lastResetStepIdRef = useRef(null);
+
   const [retryCounter, setRetryCounter] = useState(0);
 
   const isCurrentStepInAsync = asyncState.stepId === stepId;
@@ -49,7 +59,24 @@ export default function BobExplainerPane({
   // Active explanation: memory cache takes precedence
   const explanation = cachedData || currentStepData;
   const isFromCache = Boolean(cachedData);
-  const loading = !explanation && !error && Boolean(currentStep);
+
+  // When the step changes, reset the "requested" flag so the button reappears
+  // for steps that haven't been explained yet.
+  useEffect(() => {
+    if (stepId !== lastResetStepIdRef.current) {
+      lastResetStepIdRef.current = stepId;
+      // If this step is already cached there's nothing to request — skip reset
+      if (!explanationCache.has(stepId)) {
+        setExplainRequested(false);
+      }
+    }
+  }, [stepId]);
+
+  // loading is true only while a fetch is actually in flight
+  const loading = explainRequested && !explanation && !error && Boolean(currentStep);
+
+  // Whether to show the idle prompt (no explanation, not loading, not errored)
+  const showPromptButton = Boolean(currentStep) && !explanation && !explainRequested;
 
   // Check if current line matches any Safe Insertion Point from Stage 10
   const matchingSafePoint = safeInsertionPoints.find(
@@ -57,6 +84,8 @@ export default function BobExplainerPane({
   );
 
   useEffect(() => {
+    // Only fetch when the user has explicitly requested it
+    if (!explainRequested) return;
     if (!currentStep || typeof currentStep.step_id === 'undefined') return;
 
     const id = currentStep.step_id;
@@ -120,12 +149,17 @@ export default function BobExplainerPane({
     return () => {
       isSubscribed = false;
     };
-  }, [stepId, currentStepIndex, currentStep, filename, retryCounter]);
+  }, [stepId, currentStepIndex, currentStep, filename, retryCounter, explainRequested]);
+
+  const handleExplain = useCallback(() => {
+    setExplainRequested(true);
+  }, []);
 
   const handleRetry = useCallback(() => {
     if (stepId !== undefined && stepId !== null) {
       explanationCache.delete(stepId);
       setRetryCounter((c) => c + 1);
+      setExplainRequested(true);
     }
   }, [stepId]);
 
@@ -188,6 +222,31 @@ export default function BobExplainerPane({
                 {codeLine}
               </code>
             </div>
+          </div>
+        )}
+
+        {/* ── Idle Prompt Button ─────────────────────────────────────────────
+            Shown when there is a step but the user hasn't asked for an
+            explanation yet. No API call is made until this button is clicked. */}
+        {showPromptButton && (
+          <div className="flex flex-col items-center justify-center gap-3 py-6 px-4">
+            <div className="text-slate-500 text-[11px] font-mono text-center leading-relaxed">
+              Step <span className="text-slate-300 font-semibold">#{stepId}</span> — Line{' '}
+              <span className="text-slate-300 font-semibold">{lineNumber}</span>
+              <br />
+              <span className="text-slate-600">No explanation loaded yet.</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleExplain}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 hover:border-cyan-500/50 text-cyan-300 hover:text-cyan-200 text-xs font-mono font-semibold transition-all cursor-pointer shadow-sm"
+            >
+              <span className="text-sm leading-none">⚡</span>
+              Explain with Bob
+            </button>
+            <p className="text-[10px] text-slate-600 font-mono text-center">
+              Uses one API request · result is cached per step
+            </p>
           </div>
         )}
 

@@ -75,14 +75,14 @@ export async function postTrace(code, mode = "logic_lens", maxSteps = undefined)
   }
 
   const data = await response.json();
-  if (Array.isArray(data)) {
+  // Backend always returns { steps: [...], safe_insertion_points: [...] }
+  // Return the full response object so callers can access both fields.
+  if (data && Array.isArray(data.steps)) {
     return data;
   }
-  if (data && Array.isArray(data.steps)) {
-    const steps = data.steps;
-    steps.safe_insertion_points = data.safe_insertion_points || [];
-    steps.rawResponse = data;
-    return steps;
+  // Fallback: bare array (legacy / unexpected shape)
+  if (Array.isArray(data)) {
+    return { steps: data, safe_insertion_points: [] };
   }
   return data;
 }

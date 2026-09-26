@@ -136,83 +136,40 @@ export default function TracePlayer({
     onSelectStepIndex(idx);
   };
 
-  // Stage 7: Jump to loop start
+  // Stage 7: Jump to the first step of the loop we are currently inside.
+  // Only operates when currentStep has a loop_context (button is hidden otherwise).
   const handleJumpToLoopStart = () => {
     const currentLoopId = currentStep?.loop_context?.loop_id;
-    if (currentLoopId) {
-      for (let i = 0; i < totalSteps; i++) {
-        if (traceSteps[i]?.loop_context?.loop_id === currentLoopId) {
-          if (i !== currentStepIndex) {
-            onSelectStepIndex(i);
-            return;
-          }
-          break;
-        }
-      }
-    }
-    // Search backward for previous loop
-    for (let i = currentStepIndex - 1; i >= 0; i--) {
-      if (traceSteps[i]?.loop_context?.loop_id) {
-        const id = traceSteps[i].loop_context.loop_id;
-        for (let j = 0; j <= i; j++) {
-          if (traceSteps[j]?.loop_context?.loop_id === id) {
-            onSelectStepIndex(j);
-            return;
-          }
-        }
-      }
-    }
-    // Search forward for next loop start
-    for (let i = currentStepIndex + 1; i < totalSteps; i++) {
-      if (traceSteps[i]?.loop_context?.loop_id) {
+    if (!currentLoopId) return;
+    for (let i = 0; i < totalSteps; i++) {
+      if (traceSteps[i]?.loop_context?.loop_id === currentLoopId) {
         onSelectStepIndex(i);
         return;
       }
     }
   };
 
-  // Stage 7: Jump to loop end
+  // Stage 7: Jump to the exit step of the loop we are currently inside.
+  // Only operates when currentStep has a loop_context (button is hidden otherwise).
   const handleJumpToLoopEnd = () => {
     const currentLoopId = currentStep?.loop_context?.loop_id;
-    if (currentLoopId) {
-      let lastMatch = -1;
-      for (let i = currentStepIndex; i < totalSteps; i++) {
-        if (traceSteps[i]?.loop_context?.loop_id === currentLoopId) {
-          lastMatch = i;
-          if (traceSteps[i]?.loop_context?.is_exit_step) {
-            onSelectStepIndex(i);
-            return;
-          }
-        }
-      }
-      if (lastMatch !== -1 && lastMatch !== currentStepIndex) {
-        onSelectStepIndex(lastMatch);
-        return;
-      }
-    }
-    // Search forward for next loop end
-    for (let i = currentStepIndex + 1; i < totalSteps; i++) {
-      if (traceSteps[i]?.loop_context?.loop_id) {
-        const id = traceSteps[i].loop_context.loop_id;
-        let lastMatch = i;
-        for (let j = i; j < totalSteps; j++) {
-          if (traceSteps[j]?.loop_context?.loop_id === id) {
-            lastMatch = j;
-            if (traceSteps[j]?.loop_context?.is_exit_step) {
-              onSelectStepIndex(j);
-              return;
-            }
-          }
-        }
-        if (lastMatch !== -1) {
-          onSelectStepIndex(lastMatch);
+    if (!currentLoopId) return;
+    let lastMatch = -1;
+    for (let i = 0; i < totalSteps; i++) {
+      if (traceSteps[i]?.loop_context?.loop_id === currentLoopId) {
+        lastMatch = i;
+        if (traceSteps[i]?.loop_context?.is_exit_step) {
+          onSelectStepIndex(i);
           return;
         }
       }
     }
+    // No explicit exit step found — land on the last step bearing this loop_id.
+    if (lastMatch !== -1) onSelectStepIndex(lastMatch);
   };
 
-  const hasAnyLoops = traceSteps.some((s) => !!s.loop_context);
+  // True only while the current step is inside a loop.
+  const inLoop = !!currentStep?.loop_context;
 
   const progressPct = (((currentStepIndex + 1) / totalSteps) * 100).toFixed(1);
 
@@ -312,30 +269,30 @@ export default function TracePlayer({
               </button>
             </div>
 
-            {/* Loop Stepper Dock */}
-            <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-lg p-0.5">
-              <button
-                type="button"
-                onClick={handleJumpToLoopStart}
-                disabled={!hasAnyLoops}
-                className="px-2 py-1 flex items-center gap-1 text-xs font-mono disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
-                title="Jump to Loop Start"
-              >
-                <span className="text-cyan-400 font-bold">⟲</span>
-                <span>Loop Start</span>
-              </button>
-              <div className="h-3.5 w-px bg-slate-700" />
-              <button
-                type="button"
-                onClick={handleJumpToLoopEnd}
-                disabled={!hasAnyLoops}
-                className="px-2 py-1 flex items-center gap-1 text-xs font-mono disabled:opacity-30 hover:text-cyan-400 text-slate-400 transition-colors rounded hover:bg-slate-700/60"
-                title="Jump to Loop End"
-              >
-                <span>Loop End</span>
-                <span className="text-cyan-400 font-bold">⟳</span>
-              </button>
-            </div>
+            {/* Loop Stepper Dock — visible only while inside a loop */}
+            {inLoop && (
+              <div className="flex items-center bg-emerald-950/40 border border-emerald-500/30 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={handleJumpToLoopStart}
+                  className="px-2 py-1 flex items-center gap-1 text-xs font-mono hover:text-emerald-300 text-emerald-400 transition-colors rounded hover:bg-emerald-900/40"
+                  title={`Jump to start of ${currentStep.loop_context.loop_type} loop`}
+                >
+                  <span className="font-bold">⟲</span>
+                  <span>Loop Start</span>
+                </button>
+                <div className="h-3.5 w-px bg-emerald-700/50" />
+                <button
+                  type="button"
+                  onClick={handleJumpToLoopEnd}
+                  className="px-2 py-1 flex items-center gap-1 text-xs font-mono hover:text-emerald-300 text-emerald-400 transition-colors rounded hover:bg-emerald-900/40"
+                  title={`Jump to end of ${currentStep.loop_context.loop_type} loop`}
+                >
+                  <span>Loop End</span>
+                  <span className="font-bold">⟳</span>
+                </button>
+              </div>
+            )}
 
             {/* Speed toggle */}
             <div className="flex items-center bg-slate-800/80 border border-slate-700/60 rounded-lg p-0.5 text-xs font-mono">
@@ -438,6 +395,9 @@ export default function TracePlayer({
               const idx = traceSteps.findIndex(s => s.line_number === lineNum);
               if (idx !== -1) onSelectStepIndex(idx);
             }}
+            mlAuditIssues={auditIssues}
+            selectedAuditIssue={selectedAuditIssue}
+            onAuditMarkerClick={handleAuditMarkerClick}
           />
         </div>
 

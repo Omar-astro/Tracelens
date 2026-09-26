@@ -96,6 +96,7 @@ export default function CodeViewer({
   safeInsertionPoints = [],
   selectedSafePoint = null,
   onGutterMarkerClick = null,
+  onLineClick = null,
   mlAuditIssues = [],
   selectedAuditIssue = null,
   onAuditMarkerClick = null,

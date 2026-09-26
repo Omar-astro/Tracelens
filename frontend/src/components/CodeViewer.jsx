@@ -89,6 +89,7 @@ export default function CodeViewer({
   currentStep,
   skippedRange = null,
   safeInsertionPoints = [],
+  selectedSafePoint = null,
   onGutterMarkerClick = null,
 }) {
   // Build a fast lookup: lineNumber → SafeInsertionPoint
@@ -135,6 +136,8 @@ export default function CodeViewer({
             skippedRange != null &&
             lineNum >= skippedRange[0] &&
             lineNum <= skippedRange[1];
+          const safePoint = safeLineMap[lineNum];
+          const isSafePointSelected = selectedSafePoint?.line_number === lineNum;
 
           return (
             <div
@@ -164,17 +167,22 @@ export default function CodeViewer({
                 {lineNum}
               </div>
 
-              {/* Gutter decoration column — Stage 10: ★ Safe Hook marker */}
-              <div className="shrink-0 w-5 flex items-center justify-center">
-                {safeLineMap[lineNum] ? (
+              {/* Gutter decoration column — Stage 10: [★ Safe Hook] marker */}
+              <div className="shrink-0 min-w-[22px] px-1 flex items-center justify-center">
+                {safePoint ? (
                   <button
                     type="button"
-                    title={`Safe Hook: ${safeLineMap[lineNum].target_variable}`}
-                    onClick={() => onGutterMarkerClick && onGutterMarkerClick(safeLineMap[lineNum])}
-                    className="text-amber-400 text-[11px] leading-none hover:text-amber-300 hover:scale-125 transition-transform cursor-pointer"
-                    aria-label={`Safe insertion point on line ${lineNum}`}
+                    title={`[★ Safe Hook] Line ${lineNum}: ${safePoint.target_variable} — ${safePoint.reason}`}
+                    onClick={() => onGutterMarkerClick && onGutterMarkerClick(safePoint)}
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer shadow-sm select-none ${
+                      isSafePointSelected
+                        ? 'bg-amber-500/30 text-amber-200 border border-amber-400 ring-1 ring-amber-400/50'
+                        : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 hover:border-amber-400'
+                    }`}
+                    aria-label={`[★ Safe Hook] Line ${lineNum}: ${safePoint.target_variable}`}
                   >
-                    ★
+                    <span className="text-amber-400 font-bold leading-none">★</span>
+                    <span className="text-[9px] uppercase tracking-wider font-semibold leading-none">Safe Hook</span>
                   </button>
                 ) : (
                   <span aria-hidden="true" />

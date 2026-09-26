@@ -372,6 +372,7 @@ export default function TracePlayer({
             currentStep={currentStep}
             skippedRange={currentStep?.branch_context?.skipped_range ?? null}
             safeInsertionPoints={safeInsertionPoints}
+            selectedSafePoint={selectedSafePoint}
             onGutterMarkerClick={setSelectedSafePoint}
           />
         </div>
@@ -403,6 +404,7 @@ export default function TracePlayer({
           <HandoffDrawer
             selectedPoint={selectedSafePoint}
             safeInsertionPoints={safeInsertionPoints}
+            onSelectPoint={setSelectedSafePoint}
           />
         </div>
       </div>

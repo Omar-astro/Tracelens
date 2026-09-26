@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import CodeViewer from './CodeViewer';
 import LoopVisualizer from './LoopVisualizer';
 import BranchVisualizer from './BranchVisualizer';
 import StateBoard from './StateBoard';
+import HandoffDrawer from './HandoffDrawer';
 
 /**
  * TracePlayer — Stage 7: Studio Shell + Playback Scrubber.
@@ -24,7 +25,10 @@ export default function TracePlayer({
   onTogglePlay,
   playbackSpeed,
   onChangePlaybackSpeed,
+  safeInsertionPoints = [],
 }) {
+  // Stage 10: tracks which SafeInsertionPoint the user clicked in the gutter
+  const [selectedSafePoint, setSelectedSafePoint] = useState(null);
   const totalSteps = traceSteps.length;
   const currentStep = traceSteps[currentStepIndex] ?? traceSteps[0];
 
@@ -361,12 +365,15 @@ export default function TracePlayer({
 
       {/* ── 4-Pane Responsive Workspace ──────────────────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden min-h-0">
-        {/* LEFT (~40%): Code Viewer — passes skippedRange from active branch */}
+        {/* LEFT (~40%): Code Viewer — gutter markers + skipped range */}
         <div className="w-full lg:w-[40%] min-h-[320px] lg:min-h-0 min-w-[280px] flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-hidden">
           <CodeViewer
             code={code}
             currentStep={currentStep}
             skippedRange={currentStep?.branch_context?.skipped_range ?? null}
+            safeInsertionPoints={safeInsertionPoints}
+            selectedSafePoint={selectedSafePoint}
+            onGutterMarkerClick={setSelectedSafePoint}
           />
         </div>
 
@@ -392,20 +399,13 @@ export default function TracePlayer({
           <StateBoard currentStep={currentStep} />
         </div>
 
-        {/* RIGHT (~25%): Handoff / intent drawer — placeholder for Stage 10 */}
-        <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[180px] flex flex-col overflow-auto p-4 bg-slate-950/30">
-          {/* TODO(stage-10): render HandoffDrawer here */}
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-600">
-            <svg className="w-8 h-8 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <p className="text-xs font-mono text-center">
-              Handoff Drawer<br />
-              <span className="text-slate-700">(Stage 10)</span>
-            </p>
-          </div>
+        {/* RIGHT (~25%): Stage 10 — HandoffDrawer with gutter safe-hook detail */}
+        <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[180px] flex flex-col overflow-hidden border-l border-slate-800 bg-slate-950/30">
+          <HandoffDrawer
+            selectedPoint={selectedSafePoint}
+            safeInsertionPoints={safeInsertionPoints}
+            onSelectPoint={setSelectedSafePoint}
+          />
         </div>
       </div>
     </div>

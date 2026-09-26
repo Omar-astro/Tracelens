@@ -15,17 +15,19 @@ export default function App() {
   const [view, setView] = useState('intake'); // 'intake' | 'studio'
 
   // Trace state lifted from CodeInputPane via onTraceComplete
-  const [traceSteps, setTraceSteps] = useState(null);   // TraceStep[] | null
-  const [sourceCode, setSourceCode] = useState('');     // last traced source
+  const [traceSteps, setTraceSteps] = useState(null);               // TraceStep[] | null
+  const [sourceCode, setSourceCode] = useState('');                 // last traced source
+  const [safeInsertionPoints, setSafeInsertionPoints] = useState([]); // Stage 10
 
   // Playback state lives here so it persists when navigating back to intake
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  const handleTraceComplete = useCallback((steps, code) => {
+  const handleTraceComplete = useCallback((steps, code, safePoints = []) => {
     setTraceSteps(steps);
     setSourceCode(code);
+    setSafeInsertionPoints(safePoints);
     setCurrentStepIndex(0);
     setIsPlaying(false);
     setView('studio');
@@ -105,6 +107,7 @@ export default function App() {
           onTogglePlay={setIsPlaying}
           playbackSpeed={playbackSpeed}
           onChangePlaybackSpeed={setPlaybackSpeed}
+          safeInsertionPoints={safeInsertionPoints}
         />
       </main>
     );
@@ -138,7 +141,7 @@ export default function App() {
       <CodeInputPane mode={mode} onTraceComplete={handleTraceComplete} />
 
       <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 8 Visualizers Active
+        TraceLens • Stage 10 Gutter Markers &amp; Handoff Drawer Active
       </footer>
     </main>
   );

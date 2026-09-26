@@ -109,13 +109,15 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete }) 
 
     try {
       const response = await postTrace(code, mode);
-      // Backend returns { steps: TraceStep[], safe_insertion_points: [...] }
-      const steps = Array.isArray(response) ? response : (response.steps ?? []);
+      // traceClient now always returns { steps: TraceStep[], safe_insertion_points: [...] }
+      const steps = response.steps ?? [];
+      // Stage 10: safe insertion points from backend (Stage 9)
+      const safePoints = response.safe_insertion_points ?? [];
       setTraceSteps(steps);
       if (onTraceComplete) {
-        onTraceComplete(steps, code);
+        onTraceComplete(steps, code, safePoints);
       }
-      console.log('Trace complete —', steps.length, 'steps received:', steps);
+      console.log('Trace complete —', steps.length, 'steps,', safePoints.length, 'safe insertion points');
     } catch (err) {
       const message =
         err instanceof TraceApiError

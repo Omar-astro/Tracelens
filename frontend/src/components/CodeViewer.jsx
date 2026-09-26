@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 
 /**
- * CodeViewer — Stage 7: Read-only syntax viewer.
+ * CodeViewer — Stage 7 + Stage 10: Read-only syntax viewer with gutter markers.
  *
  * - Highlights and auto-scrolls to the line matching currentStep.line_number.
- * - Left gutter column is reserved for decoration markers (populated in Stage 10).
+ * - Stage 10: Renders a ★ Safe Hook gutter marker on any line in safeInsertionPoints.
+ * - Clicking a ★ marker calls onGutterMarkerClick(safeInsertionPoint).
  * - No editing; no Monaco dependency — pure React + Tailwind.
  */
 // Lightweight Python syntax tokenizer for read-only Prism-style presentation
@@ -83,7 +84,22 @@ function highlightPythonLine(line) {
   return elements.length > 0 ? elements : line;
 }
 
-export default function CodeViewer({ code, currentStep, skippedRange = null }) {
+export default function CodeViewer({
+  code,
+  currentStep,
+  skippedRange = null,
+  safeInsertionPoints = [],
+  selectedSafePoint = null,
+  onGutterMarkerClick = null,
+}) {
+  // Build a fast lookup: lineNumber → SafeInsertionPoint
+  const safeLineMap = React.useMemo(() => {
+    const map = {};
+    for (const pt of safeInsertionPoints) {
+      map[pt.line_number] = pt;
+    }
+    return map;
+  }, [safeInsertionPoints]);
   const activeLine = currentStep?.line_number ?? null;
   const lines = code ? code.split('\n') : [];
 
@@ -120,6 +136,8 @@ export default function CodeViewer({ code, currentStep, skippedRange = null }) {
             skippedRange != null &&
             lineNum >= skippedRange[0] &&
             lineNum <= skippedRange[1];
+          const safePoint = safeLineMap[lineNum];
+          const isSafePointSelected = selectedSafePoint?.line_number === lineNum;
 
           return (
             <div
@@ -149,9 +167,27 @@ export default function CodeViewer({ code, currentStep, skippedRange = null }) {
                 {lineNum}
               </div>
 
-              {/* Gutter decoration column — empty, reserved for Stage 10 */}
-              {/* TODO(stage-10): render gutter marker icons here */}
-              <div className="shrink-0 w-5 flex items-center justify-center" aria-hidden="true" />
+              {/* Gutter decoration column — Stage 10: [★ Safe Hook] marker */}
+              <div className="shrink-0 min-w-[22px] px-1 flex items-center justify-center">
+                {safePoint ? (
+                  <button
+                    type="button"
+                    title={`[★ Safe Hook] Line ${lineNum}: ${safePoint.target_variable} — ${safePoint.reason}`}
+                    onClick={() => onGutterMarkerClick && onGutterMarkerClick(safePoint)}
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer shadow-sm select-none ${
+                      isSafePointSelected
+                        ? 'bg-amber-500/30 text-amber-200 border border-amber-400 ring-1 ring-amber-400/50'
+                        : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 hover:border-amber-400'
+                    }`}
+                    aria-label={`[★ Safe Hook] Line ${lineNum}: ${safePoint.target_variable}`}
+                  >
+                    <span className="text-amber-400 font-bold leading-none">★</span>
+                    <span className="text-[9px] uppercase tracking-wider font-semibold leading-none">Safe Hook</span>
+                  </button>
+                ) : (
+                  <span aria-hidden="true" />
+                )}
+              </div>
 
               {/* Code text with syntax tokenization */}
               <pre

@@ -338,6 +338,18 @@ export default function BobExplainerPane({
               </span>
             ) : null}
 
+            {!blockLoading && blockExplanation && (
+              <button
+                type="button"
+                onClick={handleBlockRetry}
+                className="text-[9px] font-mono text-cyan-300 hover:text-cyan-100 bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-500/30 px-2 py-0.5 rounded flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
+                title="Regenerate explanation (bypasses cache)"
+              >
+                <span>🔄</span>
+                <span>Regenerate</span>
+              </button>
+            )}
+
             {onClearLineRange && (
               <button
                 type="button"
@@ -562,6 +574,18 @@ export default function BobExplainerPane({
               <span>Live AI</span>
             </span>
           ) : null}
+
+          {!loading && explanation && (
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="text-[9px] font-mono text-cyan-300 hover:text-cyan-100 bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-500/30 px-2 py-0.5 rounded flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
+              title="Regenerate explanation (bypasses cache)"
+            >
+              <span>🔄</span>
+              <span>Regenerate</span>
+            </button>
+          )}
 
           {lineNumber && (
             <span className="text-[10px] font-mono text-slate-300 bg-slate-800/80 border border-slate-700/60 px-2 py-0.5 rounded">

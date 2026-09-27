@@ -1412,6 +1412,12 @@ def generate_fallback_block_explanation(
             if s not in unique_steps:
                 unique_steps.append(s)
 
+        uncond_stmts = [s for s in for_node.body if not isinstance(s, ast.If)] if for_node else []
+        if_stmts = [s for s in for_node.body if isinstance(s, ast.If)] if for_node else []
+
+        uncond_acts = [_describe_sub_action(s) for s in uncond_stmts]
+        uncond_str = ", ".join(uncond_acts)
+
         if counts_errors and transforms and accumulators:
             intent = f"Iterates through `{iter_var}` to clean user records, count HTTP error responses, and accumulate valid entries into `{accumulators[0] if accumulators else 'accumulator'}`."
             note = f"Loops through `{iter_var}`, standardizing usernames, counting HTTP errors (`status >= 400`), and keeping only valid records in `{accumulators[0] if accumulators else 'accumulator'}`."
@@ -1420,35 +1426,51 @@ def generate_fallback_block_explanation(
             intent = f"Iterates through columns in `{iter_var}` to calculate Interquartile Range (IQR) bounds and remove statistical outliers."
             note = f"Calculates 1.5 * IQR outlier bounds for each column in `{iter_var}` and filters out anomalies outside the range."
             tip = f"You can safely hook additional validation or logging inside the loop body, or inspect final values after line {end_line}."
-        elif if_with_else:
-            cond_str = ast.unparse(if_with_else.test)
-            b_acts = [_describe_sub_action(s) for s in if_with_else.body]
-            e_acts = [_describe_sub_action(s) for s in if_with_else.orelse]
+        elif if_stmts:
+            first_if = if_stmts[0]
+            cond_str = ast.unparse(first_if.test)
+            b_acts = [_describe_sub_action(s) for s in first_if.body]
+            e_acts = [_describe_sub_action(s) for s in first_if.orelse]
             b_str = ", ".join(b_acts) if b_acts else "executes conditional block"
-            e_str = ", ".join(e_acts) if e_acts else "executes alternate block"
+            e_str = ", ".join(e_acts) if e_acts else ""
 
-            note = f"Loops through {iter_label}. At every iteration it {e_str}, except when `{cond_str}` where it {b_str}."
-            intent = f"Iterates through {iter_label}, branching on `{cond_str}` to {b_str} (otherwise {e_str})."
-            unique_steps = [
-                f"Iterates `{target_var}` through {iter_label}",
-                f"Evaluates condition: `{cond_str}`",
-                f"When `{cond_str}` is True: {b_str}",
-                f"For all other values (else branch): {e_str}",
-            ]
+            if uncond_str and e_str:
+                note = f"Loops through {iter_label}. At every iteration it {uncond_str}, branching on `{cond_str}` to {b_str} (otherwise {e_str})."
+                intent = f"Iterates through {iter_label}, executing {uncond_str} and branching on `{cond_str}`."
+                unique_steps = [
+                    f"Iterates `{target_var}` through {iter_label}",
+                    f"At every iteration: {uncond_str}",
+                    f"Evaluates condition: `{cond_str}`",
+                    f"When `{cond_str}` is True: {b_str}",
+                    f"For other values (else branch): {e_str}",
+                ]
+            elif uncond_str and not e_str:
+                note = f"Loops through {iter_label}. At every iteration it {uncond_str}, and when `{cond_str}` it also {b_str}."
+                intent = f"Iterates through {iter_label}, executing {uncond_str} on each pass and {b_str} when `{cond_str}`."
+                unique_steps = [
+                    f"Iterates `{target_var}` through {iter_label}",
+                    f"At every iteration: {uncond_str}",
+                    f"Evaluates condition: `{cond_str}`",
+                    f"When `{cond_str}` is True: {b_str}",
+                ]
+            elif e_str:
+                note = f"Loops through {iter_label}. At every iteration it {e_str}, except when `{cond_str}` where it {b_str}."
+                intent = f"Iterates through {iter_label}, branching on `{cond_str}` to {b_str} (otherwise {e_str})."
+                unique_steps = [
+                    f"Iterates `{target_var}` through {iter_label}",
+                    f"Evaluates condition: `{cond_str}`",
+                    f"When `{cond_str}` is True: {b_str}",
+                    f"For all other values (else branch): {e_str}",
+                ]
+            else:
+                note = f"Loops through {iter_label}, checking `{cond_str}` to {b_str}."
+                intent = f"Iterates through {iter_label} and conditionally executes {b_str} when `{cond_str}` is True."
+                unique_steps = [
+                    f"Iterates `{target_var}` through {iter_label}",
+                    f"Evaluates condition: `{cond_str}`",
+                    f"When `{cond_str}` is True: {b_str}",
+                ]
             tip = f"You can adjust the branching condition `{cond_str}` or handle additional cases with an `elif` branch."
-        elif if_single:
-            cond_str = ast.unparse(if_single.test)
-            b_acts = [_describe_sub_action(s) for s in if_single.body]
-            b_str = ", ".join(b_acts) if b_acts else "executes conditional block"
-
-            note = f"Loops through {iter_label}, checking `{cond_str}` to {b_str}."
-            intent = f"Iterates through {iter_label} and conditionally executes {b_str} when `{cond_str}` is True."
-            unique_steps = [
-                f"Iterates `{target_var}` through {iter_label}",
-                f"Evaluates condition: `{cond_str}`",
-                f"When `{cond_str}` is True: {b_str}",
-            ]
-            tip = f"Safe to add an `else` branch or further validate `{target_var}` inside the loop."
         else:
             acc_str = f" and updates `{', '.join(accumulators)}`" if accumulators else ""
             intent = f"Iterates over {iter_label}, processing each `{target_var}`{acc_str}."
@@ -1458,6 +1480,8 @@ def generate_fallback_block_explanation(
                 note = f"Loops through {iter_label}, computing and updating `{', '.join(transforms)}`."
             elif any("print(" in s for s in steps):
                 note = f"Loops through {iter_label}, printing outputs at each iteration."
+            elif uncond_str:
+                note = f"Loops through {iter_label}, {uncond_str} on each iteration."
             else:
                 note = f"Loops through {iter_label}, processing each `{target_var}` on every iteration."
             tip = f"You can safely hook additional validation or logging inside the loop body, or inspect final values after line {end_line}."

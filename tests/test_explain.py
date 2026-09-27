@@ -466,8 +466,17 @@ def test_explain_block_for_loop_with_branching():
     assert "outputs 'NO!'" in res.teammate_logic_note
     assert "1. Iterates `i` through numbers 1 to 9" in res.detailed_explanation
     assert "When `i == 5` is True: outputs 'NO!'" in res.detailed_explanation
-    assert "For all other values (else branch): outputs 'yes!'" in res.detailed_explanation
-
-
-
-
+def test_explain_block_for_loop_with_unconditional_and_if():
+    """Verify fallback block explanation includes both unconditional statements (e.g. print yes) and conditional branches (e.g. print no)."""
+    code = '''for i in range(1, 10):
+    print("yes!")
+    if i == 5:
+        print("no")'''
+    res = explain_block_in_context(code, start_line=1, end_line=4, block_type="for")
+    assert isinstance(res, BlockExplanation)
+    assert "numbers 1 to 9" in res.teammate_logic_note
+    assert "outputs 'yes!'" in res.teammate_logic_note
+    assert "i == 5" in res.teammate_logic_note
+    assert "outputs 'no'" in res.teammate_logic_note
+    assert "At every iteration: outputs 'yes!'" in res.detailed_explanation
+    assert "When `i == 5` is True: outputs 'no'" in res.detailed_explanation

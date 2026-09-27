@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import CodeViewer from './CodeViewer';
 import LoopVisualizer from './LoopVisualizer';
+import TerminalOutputPane from './TerminalOutputPane';
 import BranchVisualizer from './BranchVisualizer';
 import StateBoard from './StateBoard';
 import HandoffDrawer from './HandoffDrawer';
@@ -463,6 +464,13 @@ export default function TracePlayer({
               onJumpToLoopExit={handleJumpToLoopEnd}
             />
           )}
+
+          {/* Terminal Output — shown under LoopVisualizer when terminal output is emitted */}
+          <TerminalOutputPane
+            traceSteps={traceSteps}
+            currentStepIndex={currentStepIndex}
+            currentStep={currentStep}
+          />
 
           {/* BranchVisualizer — shown when step has branch_context */}
           {currentStep?.branch_context && (

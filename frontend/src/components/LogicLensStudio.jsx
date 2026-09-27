@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import LogicLensScrubber from './LogicLensScrubber';
 import LogicLensCodeViewer from './LogicLensCodeViewer';
 import LoopVisualizer from './LoopVisualizer';
+import TerminalOutputPane from './TerminalOutputPane';
 import BranchVisualizer from './BranchVisualizer';
 import StateBoard from './StateBoard';
 import TeammateHandoffDrawer from './TeammateHandoffDrawer';
@@ -76,6 +77,12 @@ export default function LogicLensStudio({
               const idx = traceSteps.findIndex(s => s.event_type === 'loop_exit');
               if (idx !== -1) onSelectStepIndex(idx);
             }}
+          />
+
+          <TerminalOutputPane
+            traceSteps={traceSteps}
+            currentStepIndex={currentStepIndex}
+            currentStep={currentStep}
           />
 
           <BranchVisualizer currentStep={currentStep} />

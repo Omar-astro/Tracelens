@@ -3,6 +3,7 @@ import ModeSelector from './components/ModeSelector';
 import CodeInputPane from './components/CodeInputPane';
 import TracePlayer from './components/TracePlayer';
 import { postTrace } from './api/traceClient';
+import { clearExplanationCache } from './api/explanationCache';
 
 /**
  * TraceLens App — Stage 7: Studio Shell + Playback Scrubber.
@@ -31,6 +32,7 @@ export default function App() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
   const handleTraceComplete = useCallback((steps, code, safePoints = [], mlIssues = []) => {
+    clearExplanationCache();
     setTraceSteps(steps);
     setSourceCode(code);
     setSafeInsertionPoints(safePoints);
@@ -47,6 +49,7 @@ export default function App() {
 
   const handleBackToIntake = useCallback(() => {
     setIsPlaying(false);
+    clearExplanationCache();
     setView('intake');
   }, []);
 

@@ -54,9 +54,10 @@ X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
 print("Dataset ready. Train size:", len(X_train))`;
 
 export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, onRequestMode, initialCode = '' }) {
-  // Tabs: 'editor' (Tab A), 'dropzone' (Tab B), 'sample' (Tab C)
+  // Tabs: 'editor', 'dropzone', 'sample', 'dataset'
   const [activeTab, setActiveTab] = useState('editor');
   const [code, setCode] = useState(initialCode || '');
+  const [sourceType, setSourceType] = useState('editor'); // 'editor' | 'file' | 'sample'
   const [loadedFileName, setLoadedFileName] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -130,14 +131,16 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
   // Populate code with Appendix C sample
   const handleLoadSample = () => {
     setCode(TEAMMATE_PIPELINE_SAMPLE);
-    setLoadedFileName('teammate_pipeline.py');
+    setSourceType('sample');
+    setLoadedFileName('Sample Script');
     setActiveTab('editor');
   };
 
   // Stage 14: Appendix C.2 ModelLens sample — switch the caller to ModelLens mode too
   const handleLoadLeakageSample = () => {
     setCode(DSAI_LEAKAGE_SAMPLE);
-    setLoadedFileName('dsai_leakage_sample.py');
+    setSourceType('sample');
+    setLoadedFileName('Sample Script');
     setActiveTab('editor');
     if (onRequestMode) onRequestMode('model_lens');
   };
@@ -164,6 +167,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       } else {
         setCode(text);
       }
+      setSourceType('file');
       setLoadedFileName(file.name);
       setActiveTab('editor');
     };
@@ -196,8 +200,20 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       // Stage 14: ModelLens audit issues — only present in model_lens mode
       const mlIssues = response.ml_audit_issues ?? [];
       setTraceSteps(steps);
+
+      let effectiveSourceName = 'Code Editor';
+      if (sourceType === 'file' && loadedFileName) {
+        effectiveSourceName = loadedFileName;
+      } else if (sourceType === 'sample') {
+        effectiveSourceName = 'Sample Script';
+      } else if (activeTab === 'editor') {
+        effectiveSourceName = 'Code Editor';
+      } else if (activeTab === 'sample') {
+        effectiveSourceName = 'Sample Script';
+      }
+
       if (onTraceComplete) {
-        onTraceComplete(steps, code, safePoints, mlIssues);
+        onTraceComplete(steps, code, safePoints, mlIssues, effectiveSourceName);
       }
       console.log('Trace complete —', steps.length, 'steps,', safePoints.length, 'safe insertion points,', mlIssues.length, 'ML audit issues');
     } catch (err) {
@@ -308,7 +324,13 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           <textarea
             ref={textareaRef}
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={(e) => {
+              setCode(e.target.value);
+              if (sourceType !== 'file') {
+                setSourceType('editor');
+                setLoadedFileName('');
+              }
+            }}
             onScroll={handleScroll}
             rows={14}
             spellCheck={false}
@@ -580,8 +602,10 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       {/* Footer Details & Primary Action Button */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-800/80">
         <div className="text-xs text-slate-500 font-mono flex items-center gap-2.5 flex-wrap">
-          {loadedFileName ? (
+          {sourceType === 'file' && loadedFileName ? (
             <span className="text-cyan-400">File: {loadedFileName}</span>
+          ) : sourceType === 'sample' ? (
+            <span className="text-cyan-400">Sample Script loaded</span>
           ) : (
             <span>Ready for analysis • Mode: {mode}</span>
           )}

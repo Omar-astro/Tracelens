@@ -95,6 +95,7 @@ function highlightPythonLine(line) {
 
 export default function CodeViewer({
   code,
+  fileName = 'Code Editor',
   currentStep,
   skippedRange = null,
   safeInsertionPoints = [],
@@ -190,7 +191,7 @@ export default function CodeViewer({
       <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span className="text-xs font-mono text-slate-300 font-medium">source.py</span>
+          <span className="text-xs font-mono text-slate-300 font-medium">{fileName || 'Code Editor'}</span>
           <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">(read-only)</span>
         </div>
         <span className="text-xs font-mono text-slate-500">{lines.length} lines</span>

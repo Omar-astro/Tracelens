@@ -26,6 +26,7 @@ import { applyBobRemediation } from '../api/traceClient';
  */
 export default function TracePlayer({
   code,
+  fileName = 'Code Editor',
   traceSteps,
   currentStepIndex,
   onSelectStepIndex,
@@ -433,6 +434,7 @@ export default function TracePlayer({
         <div className="w-full lg:w-[40%] min-h-[320px] lg:min-h-0 min-w-[280px] flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-hidden">
           <CodeViewer
             code={code}
+            fileName={fileName}
             currentStep={currentStep}
             skippedRange={currentStep?.branch_context?.skipped_range ?? null}
             safeInsertionPoints={safeInsertionPoints}
@@ -575,6 +577,7 @@ export default function TracePlayer({
                 currentStep={currentStep}
                 currentStepIndex={currentStepIndex}
                 code={code}
+                filename={fileName}
                 selectedLineRange={selectedLineRange}
                 onClearLineRange={handleClearLineRange}
                 terminalVariables={terminalVariables}

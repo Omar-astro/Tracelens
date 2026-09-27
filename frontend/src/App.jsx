@@ -19,6 +19,7 @@ export default function App() {
   // Trace state lifted from CodeInputPane via onTraceComplete
   const [traceSteps, setTraceSteps] = useState(null);               // TraceStep[] | null
   const [sourceCode, setSourceCode] = useState('');                 // last traced source.
+  const [sourceName, setSourceName] = useState('Code Editor');       // 'Code Editor' | file name | 'Sample Script'
   const [safeInsertionPoints, setSafeInsertionPoints] = useState([]); // Stage 10
   // Stage 14: ModelLens audit issues from the Stage 13 engine (model_lens mode only)
   const [mlAuditIssues, setMlAuditIssues] = useState([]);
@@ -31,7 +32,7 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  const handleTraceComplete = useCallback((steps, code, safePoints = [], mlIssues = []) => {
+  const handleTraceComplete = useCallback((steps, code, safePoints = [], mlIssues = [], name = 'Code Editor') => {
     clearExplanationCache();
     setTraceSteps(steps);
     setSourceCode(code);
@@ -40,6 +41,7 @@ export default function App() {
     setHandoffSummary(null);
     setCurrentStepIndex(0);
     setIsPlaying(false);
+    setSourceName(name);
     setView('studio');
   }, []);
 
@@ -65,12 +67,13 @@ export default function App() {
         res.steps,
         newCode,
         res.safe_insertion_points || [],
-        res.ml_audit_issues || []
+        res.ml_audit_issues || [],
+        sourceName
       );
     } catch (err) {
       console.error("Failed to re-trace patched code:", err);
     }
-  }, [mode, handleTraceComplete]);
+  }, [mode, handleTraceComplete, sourceName]);
 
 
   // -------------------------------------------------------------------------
@@ -111,8 +114,9 @@ export default function App() {
 
             {/* Breadcrumb */}
             <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400">
-              <span className="text-slate-600">teammate_code /</span>
-              <span className="text-slate-200 font-medium">teammate_pipeline.py</span>
+              <span className="text-slate-400 font-semibold">{mode === 'logic_lens' ? 'LogicLens' : 'ModelLens'}</span>
+              <span className="text-slate-600">/</span>
+              <span className="text-slate-100 font-medium">{sourceName}</span>
             </div>
           </div>
 
@@ -135,6 +139,7 @@ export default function App() {
 
         <TracePlayer
           code={sourceCode}
+          fileName={sourceName}
           traceSteps={traceSteps}
           currentStepIndex={currentStepIndex}
           onSelectStepIndex={setCurrentStepIndex}

@@ -221,7 +221,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       {/* Tab Navigation Header */}
       <div className="flex flex-wrap items-center justify-between border-b border-slate-800 pb-4 mb-4 gap-3">
         <div className="flex items-center space-x-2">
-          {/* Tab A */}
+          {/* Code Editor */}
           <button
             type="button"
             onClick={() => setActiveTab('editor')}
@@ -231,10 +231,10 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            Tab A: Code Editor
+            Code Editor
           </button>
 
-          {/* Tab B */}
+          {/* Dropzone */}
           <button
             type="button"
             onClick={() => setActiveTab('dropzone')}
@@ -244,10 +244,10 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            Tab B: Dropzone (.py / .ipynb)
+            Dropzone (.py / .ipynb)
           </button>
 
-          {/* Tab C */}
+          {/* Sample Script */}
           <button
             type="button"
             onClick={() => setActiveTab('sample')}
@@ -257,10 +257,10 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            Tab C: Sample Script
+            Sample Script
           </button>
 
-          {/* Tab D: Upload Dataset */}
+          {/* Upload Dataset */}
           <button
             type="button"
             onClick={() => setActiveTab('dataset')}
@@ -270,7 +270,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            <span>Tab D: Upload Dataset</span>
+            <span>Upload Dataset</span>
             {uploadedDatasets.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-300 font-mono font-bold">
                 {uploadedDatasets.length}

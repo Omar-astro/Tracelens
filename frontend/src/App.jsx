@@ -187,8 +187,9 @@ export default function App() {
       />
 
 
-      <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 14 ModelLens UI Active
+      <footer className="mt-12 text-center text-xs text-slate-500 font-sans tracking-wide">
+        <p className="italic text-slate-400">“Don’t just read the code — watch it think, frame by frame.”</p>
+        <p className="text-[11px] text-slate-600 font-mono mt-1">TraceLens — Deterministic Runtime Clarity &amp; ML Auditor</p>
       </footer>
     </main>
   );

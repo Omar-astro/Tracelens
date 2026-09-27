@@ -114,53 +114,66 @@ def generate_fallback_explanation(
     variables = all_variables or {}
     stripped = code_line.strip()
 
-    if stripped.startswith("for ") or stripped.startswith("while "):
-        intent = "Iterates across sequence collection to inspect and process each element."
-        detail = (
-            f"Line {line_number} evaluates the iteration target and advances the loop cursor. "
-            f"Active variables in memory: {list(variables.keys())[:5]}."
-        )
-        note = "Uses standard iteration pattern to process records sequentially without indexing overhead."
+    # 1. Loop header
+    if stripped.startswith("for "):
+        parts = stripped[4:].split(":")
+        in_parts = parts[0].split(" in ")
+        target = in_parts[0].strip() if len(in_parts) > 0 else "item"
+        iter_expr = in_parts[1].strip() if len(in_parts) > 1 else "collection"
+        intent = f"Iterates through `{iter_expr}` in loop, pulling the next element into `{target}`."
+        detail = f"Advances loop iteration on line {line_number}, binding current `{target}` from `{iter_expr}`."
+        note = f"Sequential loop processing: iterates through `{iter_expr}` element-by-element without loading entire transformed datasets into memory at once."
         safe = False
-        tip = "Avoid mutating the loop iterable directly within the loop body to maintain predictable iteration bounds."
+        tip = f"Avoid reassigning `{iter_expr}` inside the loop to maintain predictable iteration."
 
+    elif stripped.startswith("while "):
+        cond = stripped[6:].rstrip(":").strip()
+        intent = f"Evaluates loop condition `{cond}` to decide whether to continue iterating."
+        detail = f"Line {line_number} checks `{cond}` against current runtime variables."
+        note = "Uses a while-loop for dynamic iteration that terminates when the guard condition becomes false."
+        safe = False
+        tip = "Ensure loop body modifies variables in the condition to prevent an infinite loop."
+
+    # 2. Conditions
     elif stripped.startswith("if ") or stripped.startswith("elif "):
-        intent = f"Evaluates conditional branch '{stripped}' against active runtime variables."
-        detail = (
-            f"Line {line_number} tests predicate to route control flow. "
-            f"Evaluated with current scope containing {len(variables)} variables."
-        )
-        note = "Guards against invalid record formats and isolates edge-case handling logic."
-        safe = True
-        tip = "You can safely add supplemental conditions using 'and' / 'or' or insert an 'elif' branch here."
+        cond = stripped.split(" ", 1)[1].rstrip(":").strip()
+        if "status" in cond and (">=" in cond or ">" in cond or "==" in cond):
+            intent = f"Evaluates conditional branch (`{cond}`) to check if HTTP status code indicates an error."
+            detail = f"Evaluates `{cond}` on line {line_number} to detect client (4xx) or server (5xx) error responses."
+            note = "Standard HTTP status convention: codes 400 and above represent failures."
+            safe = True
+            tip = "Safe to add logging or telemetry for failed requests inside this branch."
+        elif "len(" in cond and ">" in cond:
+            intent = f"Evaluates conditional branch (`{cond}`) to validate that string or collection is non-empty."
+            detail = f"Evaluates `{cond}` on line {line_number} to filter out blank or missing values."
+            note = "Defensive validation guard: ensures only entries with valid content proceed to downstream storage."
+            safe = True
+            tip = "Safe to add an 'else' branch to log or collect dropped blank records."
+        else:
+            intent = f"Evaluates conditional branch filter: `{cond}`."
+            detail = f"Line {line_number} tests whether `{cond}` holds true for the current record."
+            note = "Branch guard: isolates execution paths to protect downstream steps from invalid data."
+            safe = True
+            tip = "Safe to add additional condition clauses with 'and' / 'or'."
 
+
+    # 3. Method calls / Appends / Prints / Increments
     elif ".append(" in stripped:
-        mutated_target = list(deltas.keys())[0] if deltas else "collection"
-        intent = f"Appends transformed record into '{mutated_target}' accumulator."
-        detail = (
-            f"Mutates list '{mutated_target}' in-place on line {line_number}. "
-            f"Current deltas: {list(deltas.keys())}."
-        )
-        note = "Accumulator pattern used to cleanly isolate valid records from unprocessed input logs."
+        lst = stripped.split(".append(")[0].strip()
+        intent = f"Appends normalized record to `{lst}` list."
+        detail = f"Adds a structured item into accumulator `{lst}` on line {line_number}."
+        note = "Accumulator pattern: gathers validated, transformed records into a clean list for downstream processing."
         safe = True
-        tip = "This is a safe extension point: add additional record validation or field enrichment before appending."
+        tip = "Safe extension point: you can enrich or validate fields in the dictionary before appending."
 
-    elif "+=" in stripped or "-=" in stripped:
-        var = list(deltas.keys())[0] if deltas else "counter"
-        intent = f"Updates arithmetic counter '{var}'."
-        detail = f"Modifies numeric state for '{var}' based on condition evaluation on line {line_number}."
-        note = "Maintains running tally of anomalies or processed items for downstream reporting."
+    elif "+=" in stripped:
+        var = stripped.split("+=")[0].strip()
+        val = stripped.split("+=")[1].strip()
+        intent = f"Increments `{var}` by {val}."
+        detail = f"Increases running counter `{var}` by {val} on line {line_number}."
+        note = "Aggregate tracking: maintains a running tally of events (such as errors or processed records)."
         safe = True
-        tip = "Safe to hook metrics aggregation or alerting if threshold values are reached."
-
-    elif "=" in stripped and not stripped.startswith("=="):
-        assigned_vars = list(deltas.keys()) if deltas else [stripped.split("=")[0].strip()]
-        var_name = assigned_vars[0] if assigned_vars else "variable"
-        intent = f"Sanitizes or initializes state for '{var_name}'."
-        detail = f"Evaluates right-hand expression on line {line_number} and binds result to '{var_name}'."
-        note = "Normalizes input attributes to ensure downstream operations receive consistent types."
-        safe = True
-        tip = f"Safe to hook additional validation on '{var_name}' immediately following this assignment."
+        tip = "Safe to trigger threshold alerts or metrics exports when this counter increments."
 
     elif stripped.startswith("print(") or stripped.startswith("logging."):
         intent = "Outputs diagnostic execution state to standard output/logs."
@@ -169,9 +182,52 @@ def generate_fallback_explanation(
         safe = True
         tip = "Safe to replace or extend with structured JSON logging or external reporting hooks."
 
+    # 4. Assignments
+    elif "=" in stripped and not stripped.startswith("=="):
+        parts = stripped.split("=", 1)
+        lhs = parts[0].strip()
+        rhs = parts[1].strip()
+
+        if "quantile" in rhs:
+            intent = f"Calculates statistical percentile for `{lhs}`."
+            detail = f"Computes percentile via `{rhs}` on line {line_number}."
+            note = "Statistical profiling: percentiles establish data distribution boundaries."
+            safe = True
+            tip = "Ensure column contains numeric data without NaN values."
+        elif "iqr" in rhs.lower() or "iqr" in lhs.lower():
+            intent = f"Calculates Interquartile Range (IQR) for outlier thresholding."
+            detail = f"Evaluates `{rhs}` to compute spread between upper and lower quartiles."
+            note = "IQR formula: Q3 - Q1 represents the middle 50% spread of the distribution."
+            safe = True
+            tip = "IQR is robust to extreme outliers compared to standard deviation."
+        elif "lower_bound" in lhs or "upper_bound" in lhs:
+            intent = f"Sets outlier boundary threshold `{lhs}`."
+            detail = f"Computes cutoff limit via `{rhs}` on line {line_number}."
+            note = "Tukey's fence standard: 1.5 * IQR beyond quartiles identifies outliers."
+            safe = True
+            tip = "Can tune multiplier (e.g. 3.0 for extreme outliers only)."
+        elif ".strip()" in rhs or ".capitalize()" in rhs:
+            intent = f"Cleans and normalizes text into `{lhs}`."
+            detail = f"Applies string normalization (`{rhs}`) on line {line_number}."
+            note = "String sanitization: removes surrounding whitespace and standardizes casing for uniform data."
+            safe = True
+            tip = f"Safe to hook additional string cleansing (e.g. regex replacement) on `{lhs}`."
+        elif "[" in rhs and (">=" in rhs or "<=" in rhs or "|" in rhs or "&" in rhs):
+            intent = f"Filters `{lhs}` dataset using boundary criteria."
+            detail = f"Evaluates boolean indexing mask (`{rhs}`) on line {line_number}."
+            note = "Vectorized dataframe filtering: efficiently subsets rows matching the condition."
+            safe = True
+            tip = "Reset dataframe index with `.reset_index(drop=True)` if sequential index is required."
+        else:
+            intent = f"Initializes or assigns `{lhs} = {rhs}`."
+            detail = f"Binds the evaluated value of `{rhs}` to variable `{lhs}` on line {line_number}."
+            note = "State assignment: defines local data structure for subsequent operations."
+            safe = True
+            tip = f"Safe to inspect `{lhs}` immediately following this line."
+
     else:
-        intent = f"Executes '{stripped[:40]}...' in current execution frame."
-        detail = f"Line {line_number} executed cleanly with {len(variables)} variables active in frame scope."
+        intent = f"Executes `{stripped[:45]}`."
+        detail = f"Line {line_number} executed cleanly in current execution frame."
         note = "Procedural logic step in the teammate's workflow pipeline."
         safe = True
         tip = "Safe to hook assertions or pre-condition guards prior to executing this line."
@@ -185,6 +241,7 @@ def generate_fallback_explanation(
         safe_to_extend=safe,
         continuation_tip=tip,
     )
+
 
 
 # ---------------------------------------------------------------------------
@@ -1159,19 +1216,23 @@ class BlockExplanation(BaseModel):
     continuation_tip: Optional[str] = None
 
 
-BOB_BLOCK_SYSTEM_PROMPT = """You are an expert software engineer and AI pair programmer in TraceLens.
-The user has selected a multi-line block of Python code (e.g. for loop, while loop, if condition, function, or custom block)
-inherited from a teammate. Explain the holistic intent, design, data mutations, and safe extension guidance for this block.
+BOB_BLOCK_SYSTEM_PROMPT = """You are an expert AI software engineer in TraceLens explaining code inherited from a teammate.
+The user has selected a multi-line block of Python code (e.g. for loop, while loop, if condition, function, or custom block).
 
-Output strictly valid JSON with keys:
-{
-  "intent_summary": "1-2 sentence high-level summary of what this entire block achieves",
-  "detailed_explanation": "2-3 sentence mechanical breakdown of loop/branch flow and data mutations",
-  "teammate_logic_note": "Explanation of teammate design pattern, rationale, or invariant in this block",
-  "variables_involved": ["list", "of", "variables"],
-  "safe_to_extend": true,
-  "continuation_tip": "Concrete advice for where to safely add or hook new logic relative to this block"
-}"""
+CRITICAL REQUIREMENT:
+Do NOT output vague, generic, or robotic jargon like "transforms state across lines", "prepares structured inputs for subsequent processing stages", or "sequential execution block".
+Explain the actual logic, conditions, transformations, and data flow in clear, simple, plain English.
+The reader must be able to fully understand what this block does, what inputs it takes, what conditions it checks, and what output it produces, WITHOUT even looking at the code itself.
+
+Rules for each field:
+- "intent_summary": 1-2 clear, plain-English sentences describing what this block achieves (e.g. "Iterates through raw log entries to clean usernames, count HTTP errors (status >= 400), and collect valid structured records.").
+- "detailed_explanation": A clear, numbered step-by-step breakdown of exactly what happens inside this block from top to bottom (e.g. "1. Extracts the username and normalizes it by trimming whitespace and capitalizing.\n2. Skips empty usernames.\n3. Checks if the HTTP status indicates an error (>= 400) and increments error_count.\n4. Appends a normalized dictionary with user, action, and success status to cleaned_records.").
+- "teammate_logic_note": Plain English explanation of the teammate's design rationale and decisions in this block (e.g. why they filter empty names, why status >= 400 is considered an error, why they store success as a boolean).
+- "variables_involved": List of the key variable names used or modified in this block.
+- "safe_to_extend": true if safe to extend, false otherwise.
+- "continuation_tip": Concrete, actionable advice on where and how to safely hook new logic (e.g. "You can safely add custom field validation inside the name check, or read cleaned_records immediately after the loop terminates.").
+
+Output strictly valid JSON with these keys."""
 
 
 def generate_fallback_block_explanation(
@@ -1186,81 +1247,190 @@ def generate_fallback_block_explanation(
     selected_code = "\n".join(selected_lines).strip()
 
     vars_found = []
+    tree = None
     try:
         tree = ast.parse(selected_code)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name):
-                if node.id not in ("print", "len", "range", "str", "int", "float", "list", "dict", "True", "False", "None"):
-                    if node.id not in vars_found:
-                        vars_found.append(node.id)
     except Exception:
         try:
             tree = ast.parse("def _dummy():\n" + "\n".join("    " + l for l in selected_lines))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Name):
-                    if node.id not in ("_dummy", "print", "len", "range", "str", "int", "float", "list", "dict", "True", "False", "None"):
-                        if node.id not in vars_found:
-                            vars_found.append(node.id)
         except Exception:
             pass
 
+    if tree:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                if node.id not in ("_dummy", "print", "len", "range", "str", "int", "float", "list", "dict", "True", "False", "None"):
+                    if node.id not in vars_found:
+                        vars_found.append(node.id)
+
+    raw_type = (block_type or "").lower().strip()
     first_line = selected_lines[0].strip() if selected_lines else ""
-    detected_type = block_type
-    if not detected_type or detected_type == "custom":
-        if first_line.startswith("for "):
-            detected_type = "for"
-        elif first_line.startswith("while "):
-            detected_type = "while"
-        elif first_line.startswith("if "):
-            detected_type = "if"
-        elif first_line.startswith("def "):
-            detected_type = "function"
-        elif first_line.startswith("try:"):
-            detected_type = "try"
-        elif first_line.startswith("with "):
-            detected_type = "with"
-        elif first_line.startswith("class "):
-            detected_type = "class"
-        else:
-            detected_type = "block"
 
-    vars_preview = ", ".join(f"`{v}`" for v in vars_found[:4]) if vars_found else "local registers"
-
-    if detected_type == "for":
-        intent = f"Iterates sequentially to process and transform items across lines {start_line}–{end_line}."
-        detailed = f"Executes the loop body for each record, updating accumulators ({vars_preview}) and filtering invalid values."
-        note = "Teammate used a standard for-loop to iterate without mutating the source sequence."
-        tip = f"Safe to inject custom filtering inside the loop body or aggregation logic immediately after line {end_line}."
-    elif detected_type == "while":
-        intent = f"Continues iterating while boundary conditions remain valid across lines {start_line}–{end_line}."
-        detailed = f"Repeatedly checks guard conditions, mutating {vars_preview} until convergence or termination."
-        note = "Teammate structured this as a while-loop to handle dynamic step limits without fixed collections."
-        tip = f"Ensure loop variants decrease monotonically to prevent non-terminating loops."
-    elif detected_type == "if":
-        intent = f"Conditional branching logic evaluating predicates and filtering records across lines {start_line}–{end_line}."
-        detailed = f"Guards execution based on evaluated expressions involving {vars_preview}."
-        note = "Defensive programming pattern to bypass corrupted or empty records before downstream transformation."
-        tip = f"Add new conditions as additional `elif` branches or wrap with additional validation checks."
-    elif detected_type == "function":
-        intent = f"Encapsulated function component reusable across the pipeline (lines {start_line}–{end_line})."
-        detailed = f"Receives parameters and computes results, managing local scope variables {vars_preview}."
-        note = "Teammate abstracted this routine to promote reusability and isolate scope."
-        tip = f"Preserve function signature and return contracts for existing downstream callers."
-    elif detected_type == "try":
-        intent = f"Exception-handling boundary protecting against runtime errors (lines {start_line}–{end_line})."
-        detailed = "Safely wraps risky operations, providing a deterministic recovery path."
-        note = "Ensures pipeline resilience by intercepting errors without crashing the process."
-        tip = f"Catch specific exception types rather than bare `except:` to avoid masking critical bugs."
-    elif detected_type == "with":
-        intent = f"Context manager block managing resource acquisition and deterministic cleanup (lines {start_line}–{end_line})."
-        detailed = f"Ensures resources used by {vars_preview} are safely released even if exceptions occur."
-        note = "Follows Python RAII pattern to prevent memory leaks and unclosed handles."
-        tip = f"Perform all resource-dependent operations strictly inside the with-block."
+    if "for" in raw_type or first_line.startswith("for "):
+        detected_type = "for"
+    elif "while" in raw_type or first_line.startswith("while "):
+        detected_type = "while"
+    elif "if" in raw_type or first_line.startswith("if ") or first_line.startswith("elif "):
+        detected_type = "if"
+    elif "func" in raw_type or "def" in raw_type or first_line.startswith("def "):
+        detected_type = "function"
+    elif "class" in raw_type or first_line.startswith("class "):
+        detected_type = "class"
+    elif "try" in raw_type or first_line.startswith("try:"):
+        detected_type = "try"
+    elif "with" in raw_type or first_line.startswith("with "):
+        detected_type = "with"
     else:
-        intent = f"Sequential pipeline execution block operating on {vars_preview} (lines {start_line}–{end_line})."
-        detailed = f"Transforms state across {len(selected_lines)} continuous lines, mutating local variables in memory."
-        note = "Structured sequentially to prepare structured inputs for subsequent processing stages."
-        tip = f"Safe to extend after line {end_line} once all intermediate structures are fully materialized."
+        detected_type = "block"
+
+    # Analyze for-loop specifically
+    if detected_type == "for":
+        for_node = None
+        if tree:
+            for node in ast.walk(tree):
+                if isinstance(node, ast.For):
+                    for_node = node
+                    break
+
+        if for_node:
+            target_var = ast.unparse(for_node.target)
+            iter_var = ast.unparse(for_node.iter)
+        else:
+            header_parts = first_line[4:].split(":")
+            sub_parts = header_parts[0].split(" in ")
+            target_var = sub_parts[0].strip() if len(sub_parts) > 0 else "item"
+            iter_var = sub_parts[1].strip() if len(sub_parts) > 1 else "collection"
+
+        steps = []
+        accumulators = []
+        transforms = []
+        filters = []
+        counts_errors = False
+        checks_iqr = False
+
+        code_lower = selected_code.lower()
+        if "quantile" in code_lower or "iqr" in code_lower:
+            checks_iqr = True
+        if "status" in code_lower and (">= 400" in selected_code or "> 399" in selected_code):
+            counts_errors = True
+
+        if for_node:
+            for stmt in ast.walk(for_node):
+                if stmt is for_node:
+                    continue
+                if isinstance(stmt, ast.Assign):
+                    t = ", ".join(ast.unparse(x) for x in stmt.targets)
+                    v = ast.unparse(stmt.value)
+                    if "quantile" in v:
+                        steps.append(f"Computes percentile `{t} = {v}`")
+                    elif "iqr" in v.lower() or "lower_bound" in t or "upper_bound" in t:
+                        steps.append(f"Calculates outlier boundary threshold `{t} = {v}`")
+                    elif ".strip()" in v or ".capitalize()" in v or ".lower()" in v or ".upper()" in v:
+                        steps.append(f"Extracts and sanitizes text for `{t}` using `{v}`")
+                        transforms.append(t)
+                    elif "[" in v and (">=" in v or "<=" in v or "|" in v or "&" in v):
+                        steps.append(f"Filters `{t}` keeping rows matching boundary conditions: `{v}`")
+                        filters.append(t)
+                    else:
+                        steps.append(f"Computes `{t} = {v}`")
+                elif isinstance(stmt, ast.AugAssign):
+                    t = ast.unparse(stmt.target)
+                    v = ast.unparse(stmt.value)
+                    steps.append(f"Increments counter `{t}` by `{v}`")
+                    accumulators.append(t)
+                elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                    c = ast.unparse(stmt.value)
+                    if ".append(" in c:
+                        lst = c.split(".append(")[0]
+                        steps.append(f"Appends normalized record to `{lst}`")
+                        accumulators.append(lst)
+                    elif "print(" in c:
+                        steps.append(f"Prints summary log via `{c}`")
+                elif isinstance(stmt, ast.If):
+                    cond = ast.unparse(stmt.test)
+                    if "status" in cond and ">=" in cond:
+                        steps.append(f"Checks HTTP status (`{cond}`) to detect error responses (4xx/5xx)")
+                    elif "len(" in cond:
+                        steps.append(f"Validates non-empty value (`{cond}`) to skip blank entries")
+                    else:
+                        steps.append(f"Evaluates filter condition: `{cond}`")
+                    filters.append(cond)
+
+        unique_steps = []
+        for s in steps:
+            if s not in unique_steps:
+                unique_steps.append(s)
+
+        if not unique_steps:
+            unique_steps = [
+                f"Iterates through `{iter_var}`, binding each element to `{target_var}`",
+                "Executes the loop body to transform data and update variables"
+            ]
+
+        if counts_errors and transforms and accumulators:
+            intent = f"Iterates through `{iter_var}` to clean user records, count HTTP error responses, and accumulate valid entries into `{accumulators[0] if accumulators else 'accumulator'}`."
+            note = f"The loop implements a filter-and-transform pattern: it reads each raw record, standardizes usernames (stripping spaces and capitalizing), detects HTTP failures (`status >= 400`), and outputs only clean records for downstream analysis."
+        elif checks_iqr:
+            intent = f"Iterates through columns in `{iter_var}` to calculate Interquartile Range (IQR) bounds and remove statistical outliers."
+            note = "Implements the standard 1.5 * IQR statistical outlier rule: values below (Q1 - 1.5*IQR) or above (Q3 + 1.5*IQR) are identified as anomalies and filtered out."
+        else:
+            acc_str = f" and updates `{', '.join(accumulators)}`" if accumulators else ""
+            intent = f"Iterates over `{iter_var}`, processing each `{target_var}`{acc_str}."
+            note = f"Sequentially transforms items from `{iter_var}` and updates local state without mutating the original collection during iteration."
+
+        detailed = "\n".join(f"{i+1}. {st}" for i, st in enumerate(unique_steps))
+        tip = f"You can safely hook additional validation or logging inside the loop body, or inspect final values after line {end_line}."
+
+    elif detected_type == "while":
+        header_cond = first_line[6:].rstrip(":").strip() if first_line.startswith("while ") else "condition"
+        intent = f"Repeatedly iterates as long as condition `{header_cond}` remains True (lines {start_line}–{end_line})."
+        detailed = f"1. Evaluates loop invariant `{header_cond}` at each cycle.\n2. Executes the loop body to update local variables.\n3. Automatically terminates when the condition evaluates to False or a break statement is reached."
+        note = "Uses a while-loop construct for dynamic iteration when the number of cycles depends on runtime state rather than a static collection."
+        tip = f"Ensure the loop body strictly mutates variables in `{header_cond}` to prevent infinite execution."
+
+    elif detected_type == "if":
+        cond_str = first_line.split(" ", 1)[1].rstrip(":").strip() if " " in first_line else "condition"
+        intent = f"Conditional branch evaluating `{cond_str}` to guard execution across lines {start_line}–{end_line}."
+        detailed = f"1. Tests predicate expression: `{cond_str}`.\n2. If True, executes the enclosed block to update local state.\n3. If False, bypasses this logic and continues to subsequent instructions."
+        note = "Defensive validation guard: isolates edge-case handling or error checks from the standard execution path."
+        tip = "Safe to add additional condition clauses with 'and' / 'or', or attach an 'else' / 'elif' branch."
+
+    elif detected_type == "function":
+        fn_match = re.search(r"def\s+([a-zA-Z_]\w*)\s*\((.*?)\)", first_line)
+        fn_name = fn_match.group(1) if fn_match else "function"
+        fn_params = fn_match.group(2) if fn_match else ""
+        intent = f"Defines reusable subroutine `{fn_name}({fn_params})` encapsulating logic across lines {start_line}–{end_line}."
+        detailed = f"1. Declares function `{fn_name}` accepting arguments `({fn_params})`.\n2. Executes encapsulated operations within an isolated local scope.\n3. Returns computed results to the caller."
+        note = "Modular decomposition: isolates reusable logic with explicit parameter inputs and return boundaries."
+        tip = f"Safe to call this function anywhere in scope after line {end_line}, preserving its parameter contracts."
+
+    else:
+        stmt_descriptions = []
+        for line in selected_lines:
+            l = line.strip()
+            if not l or l.startswith("#"):
+                continue
+            if "=" in l and not l.startswith("=="):
+                p = l.split("=", 1)
+                stmt_descriptions.append(f"Assigns `{p[0].strip()}` = `{p[1].strip()}`")
+            elif ".append(" in l:
+                stmt_descriptions.append(f"Appends record via `{l}`")
+            elif "+=" in l:
+                stmt_descriptions.append(f"Increments `{l}`")
+            elif l.startswith("print("):
+                stmt_descriptions.append(f"Outputs log `{l}`")
+            else:
+                stmt_descriptions.append(f"Executes `{l[:50]}`")
+
+        unique_stmts = []
+        for s in stmt_descriptions:
+            if s not in unique_stmts:
+                unique_stmts.append(s)
+
+        intent = f"Multi-line execution block processing data across lines {start_line}–{end_line}."
+        detailed = "\n".join(f"{i+1}. {s}" for i, s in enumerate(unique_stmts[:8]))
+        note = "Sequential execution block: executes operations in top-to-bottom order to prepare state for downstream steps."
+        tip = f"Safe to hook verification assertions or inspection hooks immediately following line {end_line}."
 
     return BlockExplanation(
         start_line=start_line,
@@ -1273,6 +1443,7 @@ def generate_fallback_block_explanation(
         safe_to_extend=True,
         continuation_tip=tip,
     )
+
 
 
 def explain_block_in_context(

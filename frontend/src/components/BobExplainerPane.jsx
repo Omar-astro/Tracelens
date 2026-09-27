@@ -442,7 +442,7 @@ export default function BobExplainerPane({
                     Logic Note
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
                   {blockExplanation.teammate_logic_note}
                 </p>
               </div>
@@ -465,7 +465,7 @@ export default function BobExplainerPane({
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-100 font-medium leading-relaxed">
+                <p className="text-xs text-slate-100 font-medium leading-relaxed whitespace-pre-line">
                   {blockExplanation.intent_summary}
                 </p>
               </div>
@@ -475,10 +475,11 @@ export default function BobExplainerPane({
                 <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-slate-400">
                   Mechanical &amp; Logical Breakdown
                 </span>
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
                   {blockExplanation.detailed_explanation}
                 </p>
               </div>
+
 
               {/* 4. Variables Involved */}
               {Array.isArray(blockExplanation.variables_involved) &&
@@ -687,7 +688,7 @@ export default function BobExplainerPane({
                   Logic Note
                 </span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
                 {explanation.teammate_logic_note}
               </p>
             </div>
@@ -711,7 +712,7 @@ export default function BobExplainerPane({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-100 font-medium leading-relaxed">
+              <p className="text-xs text-slate-100 font-medium leading-relaxed whitespace-pre-line">
                 {explanation.intent_summary}
               </p>
             </div>
@@ -721,10 +722,11 @@ export default function BobExplainerPane({
               <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-slate-400">
                 Mechanical &amp; Logical Breakdown
               </span>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
                 {explanation.detailed_explanation}
               </p>
             </div>
+
 
             {/* 4. Continuation Tip */}
             {explanation.continuation_tip && (

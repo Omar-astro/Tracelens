@@ -59,6 +59,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
   const [code, setCode] = useState(initialCode || '');
   const [sourceType, setSourceType] = useState('editor'); // 'editor' | 'file' | 'sample'
   const [loadedFileName, setLoadedFileName] = useState('');
+  const [fileMetadata, setFileMetadata] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
@@ -133,6 +134,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     setCode(TEAMMATE_PIPELINE_SAMPLE);
     setSourceType('sample');
     setLoadedFileName('Sample Script');
+    setFileMetadata(null);
     setActiveTab('editor');
   };
 
@@ -141,6 +143,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     setCode(DSAI_LEAKAGE_SAMPLE);
     setSourceType('sample');
     setLoadedFileName('Sample Script');
+    setFileMetadata(null);
     setActiveTab('editor');
     if (onRequestMode) onRequestMode('model_lens');
   };
@@ -153,25 +156,49 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       const text = e.target?.result;
       if (typeof text !== 'string') return;
 
-      if (file.name.endsWith('.ipynb')) {
+      let extractedCode = text;
+      const isNotebook = file.name.endsWith('.ipynb');
+
+      if (isNotebook) {
         try {
           const parsed = JSON.parse(text);
           const codeCells = parsed.cells
             ?.filter((cell) => cell.cell_type === 'code')
             ?.map((cell) => (Array.isArray(cell.source) ? cell.source.join('') : cell.source))
             ?.join('\n\n# --- In [Cell] ---\n');
-          setCode(codeCells || text);
+          extractedCode = codeCells || text;
         } catch {
-          setCode(text);
+          extractedCode = text;
         }
-      } else {
-        setCode(text);
       }
+
+      setCode(extractedCode);
       setSourceType('file');
       setLoadedFileName(file.name);
-      setActiveTab('editor');
+
+      const calculatedLines = extractedCode ? extractedCode.split('\n').length : 0;
+      const formattedSize = file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+        : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+
+      setFileMetadata({
+        name: file.name,
+        lineCount: calculatedLines,
+        sizeFormatted: formattedSize,
+        isNotebook,
+      });
+
+      // Do NOT switch to 'editor' tab automatically:
+      // stay on dropzone tab displaying the file card.
     };
     reader.readAsText(file);
+  };
+
+  const handleRemoveFile = () => {
+    setCode('');
+    setSourceType('editor');
+    setLoadedFileName('');
+    setFileMetadata(null);
   };
 
   const handleDrop = (e) => {
@@ -254,13 +281,18 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           <button
             type="button"
             onClick={() => setActiveTab('dropzone')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all flex items-center gap-1.5 ${
               activeTab === 'dropzone'
                 ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            Dropzone (.py / .ipynb)
+            <span>Dropzone (.py / .ipynb)</span>
+            {fileMetadata && (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-cyan-500/20 text-cyan-300 font-mono font-bold">
+                ✓
+              </span>
+            )}
           </button>
 
           {/* Sample Script */}
@@ -306,41 +338,45 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
         </button>
       </div>
 
-      {/* Tab A: Code Editor with Line Numbers & Placeholder */}
+      {/* Tab A: Code Editor with Line Numbers & Fixed Dimensions */}
       {activeTab === 'editor' && (
-        <div className="relative font-mono text-xs rounded-xl border border-slate-800 bg-slate-950 overflow-hidden flex">
+        <div className="relative font-mono text-xs rounded-xl border border-slate-800 bg-slate-950 overflow-hidden flex h-[380px]">
           {/* Gutter with line numbers */}
           <div
             ref={lineNumbersRef}
             aria-hidden="true"
-            className="w-12 py-3 bg-slate-900/60 border-r border-slate-800 text-slate-600 text-right pr-3 select-none overflow-hidden leading-6 font-mono"
+            className="w-12 py-3 bg-slate-900/60 border-r border-slate-800 text-slate-600 text-right pr-3 select-none overflow-hidden leading-6 font-mono h-full pointer-events-none shrink-0"
           >
             {Array.from({ length: lineCount }, (_, i) => (
               <div key={i + 1}>{i + 1}</div>
             ))}
           </div>
 
-          {/* Raw code textarea */}
+          {/* Raw code textarea with internal scrolling */}
           <textarea
             ref={textareaRef}
             value={code}
             onChange={(e) => {
-              setCode(e.target.value);
-              if (sourceType !== 'file') {
+              const val = e.target.value;
+              setCode(val);
+              if (fileMetadata) {
+                setFileMetadata((prev) =>
+                  prev ? { ...prev, lineCount: val.split('\n').length } : null
+                );
+              } else if (sourceType !== 'file') {
                 setSourceType('editor');
                 setLoadedFileName('');
               }
             }}
             onScroll={handleScroll}
-            rows={14}
             spellCheck={false}
             placeholder={`# Paste teammate Python code here to trace runtime execution...\n# Example:\n# raw_logs = [{"user": "alice", "action": "login"}]\n# for record in raw_logs:\n#     print(record)`}
-            className="flex-1 p-3 bg-transparent text-slate-100 placeholder-slate-600 outline-none resize-y leading-6 font-mono focus:ring-0"
+            className="flex-1 p-3 bg-transparent text-slate-100 placeholder-slate-600 outline-none resize-none leading-6 font-mono focus:ring-0 h-full overflow-y-auto overflow-x-auto whitespace-pre"
           />
         </div>
       )}
 
-      {/* Tab B: File Dropzone */}
+      {/* Tab B: File Dropzone with File Card Display */}
       {activeTab === 'dropzone' && (
         <div
           onDragOver={(e) => {
@@ -349,33 +385,88 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           }}
           onDragLeave={() => setIsDragOver(false)}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+          className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors min-h-[280px] flex flex-col items-center justify-center ${
             isDragOver
               ? 'border-cyan-400 bg-cyan-950/20'
+              : fileMetadata
+              ? 'border-cyan-500/40 bg-slate-950/80'
               : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
           }`}
         >
-          <div className="max-w-md mx-auto flex flex-col items-center">
-            <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 text-lg mb-3">
-              📄
+          {fileMetadata ? (
+            <div className="max-w-md mx-auto flex flex-col items-center">
+              <div className="w-14 h-14 rounded-2xl bg-cyan-950/60 border border-cyan-500/40 flex items-center justify-center text-cyan-300 text-2xl mb-3 shadow-lg shadow-cyan-500/10">
+                {fileMetadata.isNotebook ? '📓' : '📄'}
+              </div>
+              <h3 className="text-base font-bold font-mono text-slate-100 mb-1 flex items-center gap-2">
+                <span>{fileMetadata.name}</span>
+              </h3>
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mb-4 flex-wrap justify-center">
+                <span className="text-cyan-400 font-semibold">{fileMetadata.lineCount.toLocaleString()} lines</span>
+                <span>•</span>
+                <span>{fileMetadata.sizeFormatted}</span>
+                <span>•</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] uppercase font-bold tracking-wider inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Ready to Trace
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5 flex-wrap justify-center">
+                <label className="cursor-pointer px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors inline-flex items-center gap-1.5">
+                  <span>Choose Another File</span>
+                  <input
+                    type="file"
+                    accept=".py,.ipynb"
+                    onChange={(e) => {
+                      handleFile(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('editor')}
+                  className="px-3.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-slate-100 border border-slate-700/80 transition-colors"
+                >
+                  View in Editor
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-xs font-semibold text-rose-300 border border-rose-800/40 transition-colors"
+                  title="Remove file"
+                >
+                  Remove File
+                </button>
+              </div>
             </div>
-            <h3 className="text-sm font-semibold text-slate-200 mb-1">
-              Drop Python script or Jupyter Notebook
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Accepts <span className="font-mono text-cyan-400">.py</span> or{' '}
-              <span className="font-mono text-cyan-400">.ipynb</span> files
-            </p>
-            <label className="cursor-pointer px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors">
-              <span>Browse File</span>
-              <input
-                type="file"
-                accept=".py,.ipynb"
-                onChange={(e) => handleFile(e.target.files?.[0])}
-                className="hidden"
-              />
-            </label>
-          </div>
+          ) : (
+            <div className="max-w-md mx-auto flex flex-col items-center">
+              <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 text-lg mb-3">
+                📄
+              </div>
+              <h3 className="text-sm font-semibold text-slate-200 mb-1">
+                Drop Python script or Jupyter Notebook
+              </h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Accepts <span className="font-mono text-cyan-400">.py</span> or{' '}
+                <span className="font-mono text-cyan-400">.ipynb</span> files
+              </p>
+              <label className="cursor-pointer px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors">
+                <span>Browse File</span>
+                <input
+                  type="file"
+                  accept=".py,.ipynb"
+                  onChange={(e) => {
+                    handleFile(e.target.files?.[0]);
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          )}
         </div>
       )}
 
@@ -603,9 +694,15 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-800/80">
         <div className="text-xs text-slate-500 font-mono flex items-center gap-2.5 flex-wrap">
           {sourceType === 'file' && loadedFileName ? (
-            <span className="text-cyan-400">File: {loadedFileName}</span>
+            <span className="text-cyan-400 flex items-center gap-1.5">
+              <span>📄</span>
+              <span>File: <strong>{loadedFileName}</strong> ({fileMetadata ? `${fileMetadata.lineCount} lines` : `${lines.length} lines`})</span>
+            </span>
           ) : sourceType === 'sample' ? (
-            <span className="text-cyan-400">Sample Script loaded</span>
+            <span className="text-cyan-400 flex items-center gap-1.5">
+              <span>⚡</span>
+              <span>Sample Script loaded</span>
+            </span>
           ) : (
             <span>Ready for analysis • Mode: {mode}</span>
           )}

@@ -47,6 +47,9 @@ export default function TracePlayer({
   // Stage 14: tracks which MLAuditIssue the user clicked in the hazard gutter
   const [selectedAuditIssue, setSelectedAuditIssue] = useState(null);
 
+  // Stage 15: tracks multi-line range selection for block explainer
+  const [selectedLineRange, setSelectedLineRange] = useState(null);
+
   // Bob AI Remediation Modal & loading state
   const [isApplyingBob, setIsApplyingBob] = useState(false);
   const [bobPatchResult, setBobPatchResult] = useState(null);
@@ -78,6 +81,7 @@ export default function TracePlayer({
     setTracedCode(code);
     setSelectedAuditIssue(null);
     setSelectedSafePoint(null);
+    setSelectedLineRange(null);
   }
 
   // Stage 14: the ModelLens audit is only meaningful in model_lens mode.
@@ -100,6 +104,22 @@ export default function TracePlayer({
     setSelectedAuditIssue(issue);
     setDrawerTab('audit');
   }, []);
+
+  // Stage 15: Block & line range selection handlers
+  const handleSelectLineRange = useCallback((range) => {
+    setSelectedLineRange(range);
+    setDrawerTab('explainer');
+  }, []);
+
+  const handleClearLineRange = useCallback(() => {
+    setSelectedLineRange(null);
+  }, []);
+
+  const handleExplainBlock = useCallback((range) => {
+    setSelectedLineRange(range);
+    setDrawerTab('explainer');
+  }, []);
+
 
   const totalSteps = traceSteps.length;
   const currentStep = traceSteps[currentStepIndex] ?? traceSteps[0];
@@ -424,6 +444,10 @@ export default function TracePlayer({
             mlAuditIssues={auditIssues}
             selectedAuditIssue={selectedAuditIssue}
             onAuditMarkerClick={handleAuditMarkerClick}
+            selectedLineRange={selectedLineRange}
+            onSelectLineRange={handleSelectLineRange}
+            onClearLineRange={handleClearLineRange}
+            onExplainBlock={handleExplainBlock}
           />
         </div>
 
@@ -467,10 +491,13 @@ export default function TracePlayer({
                     ? 'bg-cyan-500 text-slate-950 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="IBM Bob Line-by-Line Contextual Intent Explainer"
+                title="IBM Bob Line & Multi-Line Block Intent Explainer"
               >
                 <span>⚡</span>
                 <span>Bob Explainer</span>
+                {selectedLineRange && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse ml-0.5" />
+                )}
               </button>
 
               <button
@@ -539,6 +566,10 @@ export default function TracePlayer({
               <BobExplainerPane
                 currentStep={currentStep}
                 currentStepIndex={currentStepIndex}
+                code={code}
+                selectedLineRange={selectedLineRange}
+                onClearLineRange={handleClearLineRange}
+                terminalVariables={terminalVariables}
                 safeInsertionPoints={safeInsertionPoints}
                 onSelectSafePoint={(pt) => {
                   setSelectedSafePoint(pt);
@@ -546,6 +577,7 @@ export default function TracePlayer({
                 }}
               />
             )}
+
 
             {drawerTab === 'hooks' && (
               <HandoffDrawer

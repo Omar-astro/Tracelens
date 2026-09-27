@@ -274,5 +274,43 @@ export async function applyBobRemediation(code, issue) {
   });
 }
 
+/**
+ * Request an AI-powered explanation for a multi-line code block (or arbitrary selected lines).
+ * Calls POST /api/explain-block.
+ *
+ * @param {object} params
+ * @param {string} params.code
+ * @param {number} params.start_line
+ * @param {number} params.end_line
+ * @param {string} [params.block_type]
+ * @param {string} [params.selected_code]
+ * @param {object} [params.all_variables]
+ * @param {string} [params.filename]
+ * @returns {Promise<any>} BlockExplanation
+ */
+export async function explainBlock({
+  code,
+  start_line,
+  end_line,
+  block_type = "block",
+  selected_code = null,
+  all_variables = {},
+  filename = "<tracelens_user_code>",
+}) {
+  if (typeof code !== "string" || !start_line || !end_line) {
+    throw new TraceApiError("Invalid parameters provided to explainBlock", 400);
+  }
+  return await postJson("/api/explain-block", {
+    code,
+    start_line,
+    end_line,
+    block_type,
+    selected_code,
+    all_variables,
+    filename,
+  });
+}
+
+
 
 

@@ -6,10 +6,16 @@
 export const explanationCache = new Map();
 export const pendingRequests = new Map();
 
+export const blockExplanationCache = new Map();
+export const pendingBlockRequests = new Map();
+
 /**
  * Clear the step explanation cache (e.g. when tracing a new session).
  */
 export function clearExplanationCache() {
   explanationCache.clear();
   pendingRequests.clear();
+  blockExplanationCache.clear();
+  pendingBlockRequests.clear();
 }
+

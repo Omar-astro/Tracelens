@@ -14,19 +14,23 @@ from pydantic import BaseModel, Field
 
 try:
     from backend.app.services.bob_client import (
+        BlockExplanation,
         BobRemediationResult,
         HandoffSummary,
         StepExplanation,
         apply_bob_remediation,
+        explain_block_in_context,
         explain_step_in_context,
         generate_handoff_summary,
     )
 except ImportError:
     from app.services.bob_client import (
+        BlockExplanation,
         BobRemediationResult,
         HandoffSummary,
         StepExplanation,
         apply_bob_remediation,
+        explain_block_in_context,
         explain_step_in_context,
         generate_handoff_summary,
     )
@@ -127,4 +131,47 @@ def bob_remediate(payload: BobRemediationRequest) -> BobRemediationResult:
             detail="code must be a non-empty string.",
         )
     return apply_bob_remediation(payload.code, payload.issue)
+
+
+# ---------------------------------------------------------------------------
+# Request Model & POST /api/explain-block Endpoint (Multi-line & Blocks)
+# ---------------------------------------------------------------------------
+
+class BlockExplainRequest(BaseModel):
+    code: str
+    start_line: int
+    end_line: int
+    block_type: Optional[str] = "custom"
+    selected_code: Optional[str] = None
+    all_variables: Optional[Dict[str, Any]] = None
+    filename: Optional[str] = "<tracelens_user_code>"
+
+
+@router.post("/explain-block", response_model=BlockExplanation)
+def explain_block(payload: BlockExplainRequest) -> BlockExplanation:
+    """
+    Accepts a code snippet, line range, and block type.
+    Invokes Bob AI to explain the multi-line block's intent, mechanics, variables, and extension safety.
+    """
+    if not payload.code or not payload.code.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="code must be a non-empty string.",
+        )
+    if payload.start_line < 1 or payload.end_line < payload.start_line:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_line must be >= 1 and end_line >= start_line.",
+        )
+
+    return explain_block_in_context(
+        code=payload.code,
+        start_line=payload.start_line,
+        end_line=payload.end_line,
+        block_type=payload.block_type,
+        selected_code=payload.selected_code,
+        all_variables=payload.all_variables,
+        filename=payload.filename or "<tracelens_user_code>",
+    )
+
 

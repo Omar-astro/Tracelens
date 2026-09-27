@@ -1142,3 +1142,224 @@ Return strictly valid JSON with keys "patched_code" and "explanation"."""
     # 2. Resilient Deterministic Fallback Refactorer
     return _deterministic_bob_remediation(code, issue)
 
+
+# ---------------------------------------------------------------------------
+# Data Contract & Service: Bob AI Multi-Line & Block Explainer
+# ---------------------------------------------------------------------------
+
+class BlockExplanation(BaseModel):
+    start_line: int
+    end_line: int
+    block_type: str
+    intent_summary: str
+    detailed_explanation: str
+    teammate_logic_note: str
+    variables_involved: List[str] = Field(default_factory=list)
+    safe_to_extend: bool = True
+    continuation_tip: Optional[str] = None
+
+
+BOB_BLOCK_SYSTEM_PROMPT = """You are an expert software engineer and AI pair programmer in TraceLens.
+The user has selected a multi-line block of Python code (e.g. for loop, while loop, if condition, function, or custom block)
+inherited from a teammate. Explain the holistic intent, design, data mutations, and safe extension guidance for this block.
+
+Output strictly valid JSON with keys:
+{
+  "intent_summary": "1-2 sentence high-level summary of what this entire block achieves",
+  "detailed_explanation": "2-3 sentence mechanical breakdown of loop/branch flow and data mutations",
+  "teammate_logic_note": "Explanation of teammate design pattern, rationale, or invariant in this block",
+  "variables_involved": ["list", "of", "variables"],
+  "safe_to_extend": true,
+  "continuation_tip": "Concrete advice for where to safely add or hook new logic relative to this block"
+}"""
+
+
+def generate_fallback_block_explanation(
+    code: str,
+    start_line: int,
+    end_line: int,
+    block_type: Optional[str] = None,
+    all_variables: Optional[Dict[str, Any]] = None,
+) -> BlockExplanation:
+    lines = code.splitlines()
+    selected_lines = lines[max(0, start_line - 1) : min(len(lines), end_line)]
+    selected_code = "\n".join(selected_lines).strip()
+
+    vars_found = []
+    try:
+        tree = ast.parse(selected_code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                if node.id not in ("print", "len", "range", "str", "int", "float", "list", "dict", "True", "False", "None"):
+                    if node.id not in vars_found:
+                        vars_found.append(node.id)
+    except Exception:
+        try:
+            tree = ast.parse("def _dummy():\n" + "\n".join("    " + l for l in selected_lines))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name):
+                    if node.id not in ("_dummy", "print", "len", "range", "str", "int", "float", "list", "dict", "True", "False", "None"):
+                        if node.id not in vars_found:
+                            vars_found.append(node.id)
+        except Exception:
+            pass
+
+    first_line = selected_lines[0].strip() if selected_lines else ""
+    detected_type = block_type
+    if not detected_type or detected_type == "custom":
+        if first_line.startswith("for "):
+            detected_type = "for"
+        elif first_line.startswith("while "):
+            detected_type = "while"
+        elif first_line.startswith("if "):
+            detected_type = "if"
+        elif first_line.startswith("def "):
+            detected_type = "function"
+        elif first_line.startswith("try:"):
+            detected_type = "try"
+        elif first_line.startswith("with "):
+            detected_type = "with"
+        elif first_line.startswith("class "):
+            detected_type = "class"
+        else:
+            detected_type = "block"
+
+    vars_preview = ", ".join(f"`{v}`" for v in vars_found[:4]) if vars_found else "local registers"
+
+    if detected_type == "for":
+        intent = f"Iterates sequentially to process and transform items across lines {start_line}–{end_line}."
+        detailed = f"Executes the loop body for each record, updating accumulators ({vars_preview}) and filtering invalid values."
+        note = "Teammate used a standard for-loop to iterate without mutating the source sequence."
+        tip = f"Safe to inject custom filtering inside the loop body or aggregation logic immediately after line {end_line}."
+    elif detected_type == "while":
+        intent = f"Continues iterating while boundary conditions remain valid across lines {start_line}–{end_line}."
+        detailed = f"Repeatedly checks guard conditions, mutating {vars_preview} until convergence or termination."
+        note = "Teammate structured this as a while-loop to handle dynamic step limits without fixed collections."
+        tip = f"Ensure loop variants decrease monotonically to prevent non-terminating loops."
+    elif detected_type == "if":
+        intent = f"Conditional branching logic evaluating predicates and filtering records across lines {start_line}–{end_line}."
+        detailed = f"Guards execution based on evaluated expressions involving {vars_preview}."
+        note = "Defensive programming pattern to bypass corrupted or empty records before downstream transformation."
+        tip = f"Add new conditions as additional `elif` branches or wrap with additional validation checks."
+    elif detected_type == "function":
+        intent = f"Encapsulated function component reusable across the pipeline (lines {start_line}–{end_line})."
+        detailed = f"Receives parameters and computes results, managing local scope variables {vars_preview}."
+        note = "Teammate abstracted this routine to promote reusability and isolate scope."
+        tip = f"Preserve function signature and return contracts for existing downstream callers."
+    elif detected_type == "try":
+        intent = f"Exception-handling boundary protecting against runtime errors (lines {start_line}–{end_line})."
+        detailed = "Safely wraps risky operations, providing a deterministic recovery path."
+        note = "Ensures pipeline resilience by intercepting errors without crashing the process."
+        tip = f"Catch specific exception types rather than bare `except:` to avoid masking critical bugs."
+    elif detected_type == "with":
+        intent = f"Context manager block managing resource acquisition and deterministic cleanup (lines {start_line}–{end_line})."
+        detailed = f"Ensures resources used by {vars_preview} are safely released even if exceptions occur."
+        note = "Follows Python RAII pattern to prevent memory leaks and unclosed handles."
+        tip = f"Perform all resource-dependent operations strictly inside the with-block."
+    else:
+        intent = f"Sequential pipeline execution block operating on {vars_preview} (lines {start_line}–{end_line})."
+        detailed = f"Transforms state across {len(selected_lines)} continuous lines, mutating local variables in memory."
+        note = "Structured sequentially to prepare structured inputs for subsequent processing stages."
+        tip = f"Safe to extend after line {end_line} once all intermediate structures are fully materialized."
+
+    return BlockExplanation(
+        start_line=start_line,
+        end_line=end_line,
+        block_type=detected_type,
+        intent_summary=intent,
+        detailed_explanation=detailed,
+        teammate_logic_note=note,
+        variables_involved=vars_found,
+        safe_to_extend=True,
+        continuation_tip=tip,
+    )
+
+
+def explain_block_in_context(
+    code: str,
+    start_line: int,
+    end_line: int,
+    block_type: Optional[str] = None,
+    selected_code: Optional[str] = None,
+    all_variables: Optional[Dict[str, Any]] = None,
+    filename: str = "<tracelens_user_code>",
+) -> BlockExplanation:
+    """
+    Explains a multi-line code block using IBM Bob / watsonx or deterministic fallback.
+    """
+    lines = code.splitlines()
+    snippet = selected_code or "\n".join(lines[max(0, start_line - 1) : min(len(lines), end_line)])
+
+    api_key = os.getenv("IBM_CLOUD_API_KEY") or os.getenv("BOB_API_KEY")
+    api_url = os.getenv("BOB_API_URL") or os.getenv("WATSONX_URL")
+
+    if api_key and api_key != "your_api_key_here_DO_NOT_COMMIT":
+        user_prompt = f"""Target Script: {filename}
+Selected Lines: {start_line} through {end_line} ({block_type or 'code block'})
+
+Selected Code Block:
+```python
+{snippet}
+```
+
+Instructions:
+Explain this multi-line block strictly matching the JSON schema."""
+
+        try:
+            endpoint = api_url or "https://api.bob.ibm.com/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": os.getenv("BOB_MODEL_ID", "ibm/granite-3-8b-instruct"),
+                "messages": [
+                    {"role": "system", "content": BOB_BLOCK_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 800,
+            }
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(endpoint, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = ""
+                    if "choices" in data and len(data["choices"]) > 0:
+                        content = data["choices"][0].get("message", {}).get("content", "")
+                    elif "results" in data and len(data["results"]) > 0:
+                        content = data["results"][0].get("generated_text", "")
+
+                    if content:
+                        clean_str = content.strip()
+                        if "```json" in clean_str:
+                            clean_str = clean_str.split("```json", 1)[1].split("```", 1)[0].strip()
+                        elif "```" in clean_str:
+                            clean_str = clean_str.split("```", 1)[1].split("```", 1)[0].strip()
+
+                        match = re.search(r"\{.*\}", clean_str, re.DOTALL)
+                        if match:
+                            parsed = json.loads(match.group(0))
+                            return BlockExplanation(
+                                start_line=start_line,
+                                end_line=end_line,
+                                block_type=block_type or parsed.get("block_type", "block"),
+                                intent_summary=str(parsed.get("intent_summary", "")),
+                                detailed_explanation=str(parsed.get("detailed_explanation", "")),
+                                teammate_logic_note=str(parsed.get("teammate_logic_note", "")),
+                                variables_involved=list(parsed.get("variables_involved", [])),
+                                safe_to_extend=bool(parsed.get("safe_to_extend", True)),
+                                continuation_tip=parsed.get("continuation_tip"),
+                            )
+        except Exception:
+            pass
+
+    return generate_fallback_block_explanation(
+        code=code,
+        start_line=start_line,
+        end_line=end_line,
+        block_type=block_type,
+        all_variables=all_variables,
+    )
+
+

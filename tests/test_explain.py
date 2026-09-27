@@ -36,6 +36,8 @@ try:
         build_b2_prompt,
         BobRemediationResult,
         apply_bob_remediation,
+        BlockExplanation,
+        explain_block_in_context,
     )
 except ImportError:
     from app.main import app
@@ -50,6 +52,8 @@ except ImportError:
         build_b2_prompt,
         BobRemediationResult,
         apply_bob_remediation,
+        BlockExplanation,
+        explain_block_in_context,
     )
 
 client = TestClient(app)
@@ -394,5 +398,57 @@ def test_api_bob_apply_remediation_endpoint():
     assert "patched_code" in data
     assert "explanation" in data
     assert "applied" in data
+
+
+def test_explain_block_for_loop():
+    """Verify fallback block explanation identifies loop structure and variables."""
+    code = """raw = [1, 2, 3]
+total = 0
+for x in raw:
+    total += x
+print(total)
+"""
+    res = explain_block_in_context(code, start_line=3, end_line=4, block_type="for")
+    assert isinstance(res, BlockExplanation)
+    assert res.block_type == "for"
+    assert res.start_line == 3
+    assert res.end_line == 4
+    assert "total" in res.variables_involved or "x" in res.variables_involved
+    assert res.safe_to_extend is True
+    assert res.teammate_logic_note != ""
+
+
+def test_api_explain_block_endpoint():
+    """Test POST /api/explain-block returns 200 with schema-valid response."""
+    code = """for item in items:
+    process(item)
+"""
+    payload = {
+        "code": code,
+        "start_line": 1,
+        "end_line": 2,
+        "block_type": "for",
+    }
+    resp = client.post("/api/explain-block", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["start_line"] == 1
+    assert data["end_line"] == 2
+    assert "intent_summary" in data
+    assert "teammate_logic_note" in data
+    assert "variables_involved" in data
+
+
+def test_api_explain_block_invalid_range():
+    """Test POST /api/explain-block rejects invalid start/end line range."""
+    payload = {
+        "code": "print('hello')",
+        "start_line": 5,
+        "end_line": 2,
+    }
+    resp = client.post("/api/explain-block", json=payload)
+    assert resp.status_code == 400
+    assert "start_line must be >= 1 and end_line >= start_line" in resp.json()["detail"]
+
 
 

@@ -13,12 +13,12 @@ import {
  *
  * Displays live AI explanations for:
  *   1) Single trace step (active line):
- *      - Logic Note (first)
+ *      - Summary (first)
  *      - Intent summary & Safe to Extend badge
  *      - Detailed explanation
  *      - Continuation tip
  *   2) Selected multi-line block (for, while, if, function, custom range):
- *      - Logic Note (first)
+ *      - Summary (first)
  *      - Block intent & Safe to Extend badge
  *      - Mechanical & logical breakdown
  *      - Variables involved
@@ -434,12 +434,12 @@ export default function BobExplainerPane({
           {/* Content View: BlockExplanation */}
           {!blockLoading && !blockError && blockExplanation && (
             <div className="space-y-3">
-              {/* 1. Logic Note (Generic, at the top) */}
+              {/* 1. Summary (at the top) */}
               <div className="p-3 rounded-lg bg-indigo-950/15 border border-indigo-500/20 space-y-1.5 shadow-sm">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-indigo-400 text-xs font-mono">🧠</span>
+                  <span className="text-indigo-400 text-xs font-mono">📝</span>
                   <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-indigo-300">
-                    Logic Note
+                    Summary
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
@@ -680,12 +680,12 @@ export default function BobExplainerPane({
         {/* Content View: StepExplanation */}
         {!loading && !error && explanation && (
           <div className="space-y-3">
-            {/* 1. Logic Note (Generic, moved to top) */}
+            {/* 1. Summary (moved to top) */}
             <div className="p-3 rounded-lg bg-indigo-950/15 border border-indigo-500/20 space-y-1.5 shadow-sm">
               <div className="flex items-center gap-1.5">
-                <span className="text-indigo-400 text-xs font-mono">🧠</span>
+                <span className="text-indigo-400 text-xs font-mono">📝</span>
                 <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-indigo-300">
-                  Logic Note
+                  Summary
                 </span>
               </div>
               <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">

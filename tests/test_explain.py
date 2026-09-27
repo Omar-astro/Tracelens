@@ -451,4 +451,23 @@ def test_api_explain_block_invalid_range():
     assert "start_line must be >= 1 and end_line >= start_line" in resp.json()["detail"]
 
 
+def test_explain_block_for_loop_with_branching():
+    """Verify fallback block explanation accurately explains loops with if-else output branches."""
+    code = '''for i in range(1, 10):
+    if i == 5:
+        print("NO!")
+    else:
+        print("yes!")'''
+    res = explain_block_in_context(code, start_line=1, end_line=5, block_type="for")
+    assert isinstance(res, BlockExplanation)
+    assert "numbers 1 to 9" in res.teammate_logic_note
+    assert "outputs 'yes!'" in res.teammate_logic_note
+    assert "i == 5" in res.teammate_logic_note
+    assert "outputs 'NO!'" in res.teammate_logic_note
+    assert "1. Iterates `i` through numbers 1 to 9" in res.detailed_explanation
+    assert "When `i == 5` is True: outputs 'NO!'" in res.detailed_explanation
+    assert "For all other values (else branch): outputs 'yes!'" in res.detailed_explanation
+
+
+
 

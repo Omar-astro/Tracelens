@@ -1,18 +1,14 @@
-"""Stage 4 Part 2 - execution sandbox for untrusted user code.
+"""
+sandbox.py — Execution sandbox for untrusted user code.
 
-Runs a pasted Python script inside a spawned subprocess with a hard wall-clock
+Runs a Python script inside a spawned subprocess with a hard wall-clock
 timeout, a restricted builtin namespace, and bounded stdout capture. The parent
-never executes user code and never propagates a user-code exception, so a
-malformed or hostile script can only ever come back as a `SandboxResult`.
+never executes user code directly and never propagates user-code exceptions,
+so any script execution returns as a structured `SandboxResult`.
 
 The tracer is injected as a `"module.path:callable"` string ref rather than an
-object: a `spawn` boundary cannot carry a closure or an unpicklable factory, and
-Stage 4.1's deterministic tracer can therefore be dropped in later without
-touching this file. See `run_in_sandbox` for the factory contract.
-
-TODO(stage-4-tracer): `builtin_line_tracer` below is a line-event-only stand-in
-so this module is independently testable. Stage 4.1 replaces it with the real
-delta engine and swaps the default `DEFAULT_TRACER_REF` at the call site.
+object: a `spawn` boundary cannot carry a closure or an unpicklable factory.
+See `run_in_sandbox` for the factory contract.
 """
 
 from __future__ import annotations
@@ -39,8 +35,8 @@ except ImportError:  # POSIX only; Windows has no resource module.
 # Constants
 # --------------------------------------------------------------------------
 
-#: The `co_filename` handed to `compile()`. The spec's tracer filter compares
-#: against this exact string, so it must stay in sync with Stage 4.1.
+#: The `co_filename` handed to `compile()`. The tracer filter compares
+#: against this exact string.
 TRACELENS_FILENAME = "<tracelens_user_code>"
 
 SANDBOX_TIMEOUT_SECONDS = 30.0
@@ -123,12 +119,11 @@ class SandboxResult:
 
 @dataclass
 class TraceContext:
-    """Handed to every tracer factory. Stage 4.1 extends or ignores as needed.
+    """Handed to every tracer factory.
 
     Note the convention: a ``line`` event fires *before* its line executes, so a
     locals snapshot taken inside the hook reflects the effect of the *previous*
-    line. Stage 4.1's delta engine has to pick a side of that boundary; the
-    hook below deliberately records no locals to avoid prejudging it.
+    line. The delta engine aligns deltas across execution step boundaries.
     """
 
     code: str
@@ -167,7 +162,7 @@ TracerFactory = Callable[[TraceContext], Callable]
 
 
 def builtin_line_tracer(ctx: TraceContext) -> Callable:
-    """Line-event-only tracer. Placeholder for Stage 4.1.
+    """Line-event-only fallback tracer.
 
     Two-level `sys.settrace` split: the *global* function is asked once per new
     frame and is where the `co_filename` filter lives, so library and stdlib
@@ -325,14 +320,9 @@ def _write_payload(result_path: str, payload: Dict[str, Any]) -> None:
     os.replace is atomic on both POSIX and Windows; a plain write is not, and the
     parent may poll this path while the child is mid-write.
 
-    `default=repr` and the broad `except` are load-bearing. Steps carry values out
-    of the traced program's locals, so once Stage 4.1 starts recording real
-    objects in `variable_deltas`, a single DataFrame or custom instance would
-    make `json.dump` raise TypeError inside the worker's `finally` block - the
-    child would die with no payload at all and the parent would report a
-    misleading resource-limit error, losing the entire trace. This is a safety
-    net, not the real fix: Stage 4.3's serializer is what should make these
-    values JSON-native in the first place.
+    `default=repr` and the broad `except` are load-bearing safety nets. Steps carry
+    values out of the traced program's locals; serialization fallback ensures complex
+    objects (DataFrames, tensors, models) never cause unhandled dump crashes.
     """
     scratch = f"{result_path}.part"
     try:
@@ -485,8 +475,7 @@ def run_in_sandbox(
 
     `tracer` is a `"module.path:callable"` ref resolved *inside the child* to a
     `TracerFactory` - a callable taking a `TraceContext` and returning a
-    `sys.settrace` global function. Stage 4.1 registers its own factory and
-    passes e.g. `"app.services.tracer:build_tracer"`; this file needs no edit.
+    `sys.settrace` global function (e.g. `"app.services.tracer:build_tracer"`).
 
     Never raises: every failure mode is folded into a `SandboxResult`.
     """
@@ -627,7 +616,7 @@ def trace_in_sandbox(
     memory_limit_mb: Optional[int] = MEMORY_LIMIT_MB,
     stdout_limit: int = STDOUT_LIMIT_CHARS,
 ) -> SandboxResult:
-    """Execute code inside the sandbox using the Stage 4 deterministic tracer.
+    """Execute code inside the sandbox using the deterministic tracer.
 
     Combines subprocess isolation, resource limits, hard timeout, and blocked
     namespace with ground-truth TraceStep recording (variable deltas, loop/branch

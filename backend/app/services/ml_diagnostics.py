@@ -1,5 +1,5 @@
 """
-ml_diagnostics.py — Stage 13: ModelLens Diagnostics Engine.
+ml_diagnostics.py — ModelLens Diagnostics Engine.
 
 Provides an ML-methodology auditor pass across completed execution traces and AST structure
 when `mode == "model_lens"`.

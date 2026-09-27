@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 /**
- * LoopVisualizer — Stage 8
+ * LoopVisualizer — Dynamic Loop Execution & Iteration Carousel.
  *
  * Renders when currentStep.loop_context is present.
  * Driven entirely by real trace data — no hardcoded values.

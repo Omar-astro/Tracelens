@@ -8,8 +8,8 @@ import {
 } from '../api/explanationCache';
 
 /**
- * BobExplainerPane — Stage 12: IBM Bob Contextual Line Intent Explainer.
- * Stage 15: Syntactic multi-line and block explainer mode.
+ * BobExplainerPane — IBM Bob Contextual Line Intent Explainer.
+ * Syntactic multi-line and block explainer mode.
  *
  * Displays live AI explanations for:
  *   1) Single trace step (active line):
@@ -79,7 +79,7 @@ export default function BobExplainerPane({
   );
 
   // ---------------------------------------------------------------------------
-  // 2. Multi-Line Block Explanation State (Stage 15)
+  // 2. Multi-Line Block Explanation State
   // ---------------------------------------------------------------------------
   const isBlockMode = Boolean(selectedLineRange);
   const blockKey = selectedLineRange
@@ -198,7 +198,7 @@ export default function BobExplainerPane({
   }, [stepId, currentStepIndex, currentStep, filename, retryCounter, explainRequested]);
 
   // ---------------------------------------------------------------------------
-  // Block Fetch Effect (Stage 15)
+  // Block Fetch Effect
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!blockExplainRequested || !selectedLineRange || !code) return;
@@ -298,7 +298,7 @@ export default function BobExplainerPane({
   }, [blockKey]);
 
   // ---------------------------------------------------------------------------
-  // A. Multi-Line Block Explainer Render (Stage 15)
+  // A. Multi-Line Block Explainer Render
   // ---------------------------------------------------------------------------
   if (isBlockMode) {
     return (
@@ -636,7 +636,7 @@ export default function BobExplainerPane({
           </div>
         )}
 
-        {/* Safe Insertion Point Link (if current line is flagged in Stage 10) */}
+        {/* Safe Insertion Point Link (if current line is flagged as safe hook) */}
         {matchingSafePoint && (
           <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start justify-between gap-2 shadow-sm">
             <div className="flex items-start gap-2">

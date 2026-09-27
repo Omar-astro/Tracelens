@@ -1,10 +1,9 @@
 """
-bob_client.py — Stage 11: IBM Bob Client & Line-by-Line Contextual Explainer.
-Stage 14: Appendix B.2 Teammate Handoff Summary.
+bob_client.py — IBM Bob Client & Line-by-Line Contextual Explainer.
+Teammate Handoff Summary & ML Remediation.
 
 Implements line-by-line intent explanations using IBM Bob API (or watsonx.ai foundation models)
-per Appendix B.1 and Appendix A (StepExplanation), plus the end-of-trace handoff guide
-per Appendix B.2 and Appendix A (HandoffSummary).
+per StepExplanation, plus the end-of-trace handoff guide (HandoffSummary).
 Provides a resilient offline fallback engine when credentials or network are unavailable.
 """
 
@@ -347,7 +346,7 @@ def explain_step_in_context(
 
 
 # ---------------------------------------------------------------------------
-# Data Contract: HandoffSummary (Appendix A) — Stage 14
+# Data Contract: HandoffSummary (Appendix A)
 # ---------------------------------------------------------------------------
 
 class HandoffSummary(BaseModel):
@@ -363,7 +362,7 @@ class HandoffSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Prompt Template (Appendix B.2) — Stage 14
+# Prompt Template (Appendix B.2)
 # ---------------------------------------------------------------------------
 
 BOB_HANDOFF_SYSTEM_PROMPT = """You are a senior technical lead reviewing a completed execution trace of a teammate's
@@ -420,7 +419,7 @@ Output strictly valid JSON with keys:
 
 
 # ---------------------------------------------------------------------------
-# Offline Heuristic Fallback Engine — Appendix B.2 (Stage 14)
+# Offline Heuristic Fallback Engine — Appendix B.2
 # ---------------------------------------------------------------------------
 
 def _describe_data_structure(name: str, value_repr: str) -> str:
@@ -688,7 +687,7 @@ def generate_fallback_handoff_summary(
 
 
 # ---------------------------------------------------------------------------
-# Main Bob Handoff Summary Function (Appendix B.2) — Stage 14
+# Main Bob Handoff Summary Function
 # ---------------------------------------------------------------------------
 
 def generate_handoff_summary(

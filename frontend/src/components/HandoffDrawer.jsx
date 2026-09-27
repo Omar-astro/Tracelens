@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 /**
- * HandoffDrawer — Stage 10: Gutter Markers + Handoff Drawer.
+ * HandoffDrawer — Gutter Markers + Handoff Drawer.
  *
  * Displays the backend-computed SafeInsertionPoint data for a selected gutter marker:
  *  - reason: why this line is a safe insertion point

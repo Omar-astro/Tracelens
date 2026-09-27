@@ -2,18 +2,16 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { detectCodeBlocks } from '../utils/codeBlockDetector';
 
 /**
- * CodeViewer — Stage 7 + Stage 10 + Stage 14: Read-only syntax viewer with gutter markers.
- * Stage 15: Syntactic block auto-detection & multi-line range selection for Bob Explainer.
+ * CodeViewer — Read-only syntax viewer with gutter markers and block selection.
  *
  * - Highlights and auto-scrolls to the line matching currentStep.line_number.
- * - Stage 10: Renders a ★ Safe Hook gutter marker on any line in safeInsertionPoints.
- * - Stage 14: Renders a hazard stripe on any line flagged by the ModelLens audit.
- *   The hazard column sits immediately right of the Stage 10 column — additive,
- *   the Safe Hook marker is untouched.
- * - Stage 15: Displays auto-select buttons for syntactic blocks (for, while, if, def, class, etc.).
+ * - Renders a ★ Safe Hook gutter marker on any line in safeInsertionPoints.
+ * - Renders a hazard stripe on any line flagged by the ModelLens audit.
+ *   The hazard column sits immediately right of the Safe Hook column.
+ * - Displays auto-select buttons for syntactic blocks (for, while, if, def, class, etc.).
  *   Allows multi-line selection via shift-click or block pill buttons.
  * - Clicking a marker calls the matching onGutterMarkerClick / onAuditMarkerClick.
- * - No editing; no Monaco dependency — pure React + Tailwind.
+ * - No editing; pure React + Tailwind.
  */
 import { SEVERITY_META, HAZARD_FILL, HAZARD_ROW_TINT, worstSeverity } from './mlAuditMeta';
 
@@ -120,7 +118,7 @@ export default function CodeViewer({
     return map;
   }, [safeInsertionPoints]);
 
-  // Stage 14: lineNumber → MLAuditIssue[]  (an ARRAY — several issues can share a line)
+  // lineNumber → MLAuditIssue[] (several issues can share a line)
   const auditLineMap = useMemo(() => {
     const map = {};
     for (const issue of mlAuditIssues) {
@@ -130,7 +128,7 @@ export default function CodeViewer({
     return map;
   }, [mlAuditIssues]);
 
-  // Stage 15: Auto-detected syntactic blocks
+  // Auto-detected syntactic blocks
   const detectedBlocks = useMemo(() => detectCodeBlocks(code), [code]);
 
   // Set of lines that were visited during execution in traceSteps
@@ -213,7 +211,7 @@ export default function CodeViewer({
         <span className="text-xs font-mono text-slate-500">{lines.length} lines</span>
       </div>
 
-      {/* Stage 15: Auto-select block buttons toolbar */}
+      {/* Auto-select block buttons toolbar */}
       {detectedBlocks.length > 0 && (
         <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/90 border-b border-slate-800 overflow-x-auto text-[11px] font-mono scrollbar-none">
           <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
@@ -247,7 +245,7 @@ export default function CodeViewer({
         </div>
       )}
 
-      {/* Stage 15: Active Multi-line Selection Bar */}
+      {/* Active Multi-line Selection Bar */}
       {selectedLineRange && (
         <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-indigo-950/40 border-b border-indigo-500/30 text-xs font-mono">
           <div className="flex items-center gap-2">
@@ -311,13 +309,13 @@ export default function CodeViewer({
           const safePoint = safeLineMap[lineNum];
           const isSafePointSelected = selectedSafePoint?.line_number === lineNum;
 
-          // Stage 15: Is line inside the selected line range?
+          // Is line inside the selected line range?
           const isSelectedRange =
             selectedLineRange != null &&
             lineNum >= selectedLineRange.startLine &&
             lineNum <= selectedLineRange.endLine;
 
-          // Stage 14: hazard markers for this line
+          // Hazard markers for this line
           const auditIssues = auditLineMap[lineNum];
           const hasAudit = !!auditIssues && auditIssues.length > 0;
           const lineSeverity = hasAudit ? worstSeverity(auditIssues) : null;
@@ -379,7 +377,7 @@ export default function CodeViewer({
               </div>
 
 
-              {/* Gutter decoration column — Stage 10: [★ Safe Hook] marker */}
+              {/* Gutter decoration column: [★ Safe Hook] marker */}
               <div className="shrink-0 min-w-[22px] px-1 flex items-center justify-center">
                 {safePoint ? (
                   <button
@@ -401,7 +399,7 @@ export default function CodeViewer({
                 )}
               </div>
 
-              {/* Stage 14 gutter column: hazard stripe on ModelLens-flagged lines */}
+              {/* Gutter column: hazard stripe on ModelLens-flagged lines */}
               <div className="shrink-0 w-4 flex items-center justify-center">
                 {hasAudit ? (
                   <button

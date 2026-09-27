@@ -1,11 +1,8 @@
 """
-explain.py — Stage 11: /api/explain-step Endpoint.
-Stage 14: /api/handoff-summary Endpoint.
+explain.py — Contextual Explanation & Handoff Summary Endpoints.
 
-Accepts single-step execution context, calls IBM Bob explainer service,
-and returns schema-valid StepExplanation JSON per Appendix A.
-
-Also exposes the Appendix B.2 end-of-trace teammate handoff summary.
+Accepts execution context, calls IBM Bob (Granite) explainer service,
+and returns schema-valid explanations and teammate handoff summaries.
 """
 
 from typing import Any, Dict, List, Optional
@@ -52,7 +49,7 @@ class StepExplainRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Request Model for Teammate Handoff Summary (Stage 14)
+# Request Model for Teammate Handoff Summary
 # ---------------------------------------------------------------------------
 
 class HandoffSummaryRequest(BaseModel):
@@ -88,7 +85,7 @@ def explain_step(payload: StepExplainRequest) -> StepExplanation:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/handoff-summary Endpoint (Stage 14 — Appendix B.2)
+# POST /api/handoff-summary Endpoint
 # ---------------------------------------------------------------------------
 
 @router.post("/handoff-summary", response_model=HandoffSummary)

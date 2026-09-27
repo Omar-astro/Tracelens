@@ -1,5 +1,5 @@
 /**
- * mlAuditMeta.js — Stage 14: Shared ModelLens audit presentation metadata.
+ * mlAuditMeta.js — Shared ModelLens audit presentation metadata.
  *
  * Kept separate from the components so severity colours, ordering, and hazard
  * stripe fills have a single source of truth across MLAuditBanner,
@@ -41,7 +41,7 @@ export const CATEGORY_LABELS = {
   metric_mismatch: 'Metric Mismatch',
 };
 
-// Hazard stripe fill per severity — diagonal hazard stripes per the Stage 14 spec.
+// Hazard stripe fill per severity — diagonal hazard stripes.
 export const HAZARD_FILL = {
   critical: 'repeating-linear-gradient(45deg, #f87171 0px, #f87171 3px, #7f1d1d 3px, #7f1d1d 7px)',
   warning: 'repeating-linear-gradient(45deg, #fbbf24 0px, #fbbf24 3px, #78350f 3px, #78350f 7px)',

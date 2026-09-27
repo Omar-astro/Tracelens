@@ -1,5 +1,5 @@
 """
-handoff_analyzer.py — Stage 9: Safe Insertion Analyzer.
+handoff_analyzer.py — Safe Insertion Analyzer.
 
 Computes variable lifecycles (born_line, mutation_lines[], last_read_line) across
 a completed trace and flags Safe Insertion Points where inheriting teammates can

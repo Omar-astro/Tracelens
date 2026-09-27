@@ -13,12 +13,12 @@ import BobRemediationModal from './BobRemediationModal';
 import { applyBobRemediation } from '../api/traceClient';
 
 /**
- * TracePlayer — Stage 7: Studio Shell + Playback Scrubber.
- * Stage 14: mounts the ModelLens risk banner and the audit / handoff-summary drawer tabs.
+ * TracePlayer — Studio Shell + Playback Scrubber.
+ * Mounts the ModelLens risk banner and the audit / handoff-summary drawer tabs.
  *
  * 4-pane responsive layout:
  *   Left  (~40%)  : CodeViewer — read-only source with active-line highlight
- *   Center (~35%) : Visualizer canvas — placeholder (Stage 8)
+ *   Center (~35%) : Visualizer canvas (Loop, Branch, StateBoard, Terminal)
  *   Right (~25%)  : Drawer — Bob Explainer / Safe Hooks / ModelLens audit / Handoff summary
  *
  * Playback state: currentStepIndex, isPlaying, playbackSpeed (0.5x / 1x / 2x)
@@ -42,14 +42,14 @@ export default function TracePlayer({
   onApplyCodeFix,
   onReTrace,
 }) {
-  // Stage 10: tracks which SafeInsertionPoint the user clicked in the gutter
+  // Tracks which SafeInsertionPoint the user clicked in the gutter
   const [selectedSafePoint, setSelectedSafePoint] = useState(null);
   // Drawer tab view ('explainer' | 'hooks' | 'audit' | 'summary')
   const [drawerTab, setDrawerTab] = useState('explainer');
-  // Stage 14: tracks which MLAuditIssue the user clicked in the hazard gutter
+  // Tracks which MLAuditIssue the user clicked in the hazard gutter
   const [selectedAuditIssue, setSelectedAuditIssue] = useState(null);
 
-  // Stage 15: tracks multi-line range selection for block explainer
+  // Tracks multi-line range selection for block explainer
   const [selectedLineRange, setSelectedLineRange] = useState(null);
 
   // Bob AI Remediation Modal & loading state
@@ -86,7 +86,7 @@ export default function TracePlayer({
     setSelectedLineRange(null);
   }
 
-  // Stage 14: the ModelLens audit is only meaningful in model_lens mode.
+  // The ModelLens audit is only meaningful in model_lens mode.
   const isModelLens = mode === 'model_lens';
   const auditIssues = isModelLens ? mlAuditIssues : [];
 
@@ -113,7 +113,7 @@ export default function TracePlayer({
     setDrawerTab('audit');
   }, []);
 
-  // Stage 15: Block & line range selection handlers
+  // Block & line range selection handlers
   const handleSelectLineRange = useCallback((range) => {
     setSelectedLineRange(range);
     setDrawerTab('explainer');
@@ -190,7 +190,7 @@ export default function TracePlayer({
     onSelectStepIndex(idx);
   };
 
-  // Stage 7: Jump to the first step of the loop we are currently inside.
+  // Jump to the first step of the loop we are currently inside.
   // Only operates when currentStep has a loop_context (button is hidden otherwise).
   const handleJumpToLoopStart = () => {
     const currentLoopId = currentStep?.loop_context?.loop_id;
@@ -203,7 +203,7 @@ export default function TracePlayer({
     }
   };
 
-  // Stage 7: Jump to the exit step of the loop we are currently inside.
+  // Jump to the exit step of the loop we are currently inside.
   // Only operates when currentStep has a loop_context (button is hidden otherwise).
   const handleJumpToLoopEnd = () => {
     const currentLoopId = currentStep?.loop_context?.loop_id;
@@ -232,7 +232,7 @@ export default function TracePlayer({
   // ---------------------------------------------------------------------------
   return (
     <div className="flex flex-col w-full flex-1 overflow-hidden min-h-0">
-      {/* ── Stage 14: ModelLens Risk Banner (model_lens mode only) ─────────── */}
+      {/* ── ModelLens Risk Banner (model_lens mode only) ────────────────────── */}
       <MLAuditBanner
         mode={mode}
         issues={auditIssues}
@@ -461,7 +461,7 @@ export default function TracePlayer({
           />
         </div>
 
-        {/* CENTER (~35%): Stage 8 Visualizer Canvas */}
+        {/* CENTER (~35%): Visualizer Canvas */}
         <div className="w-full lg:w-[35%] min-h-[220px] lg:min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-y-auto p-3 gap-3 bg-slate-950/50">
           {/* LoopVisualizer — shown when step has loop_context */}
           {currentStep?.loop_context && (
@@ -495,7 +495,7 @@ export default function TracePlayer({
           />
         </div>
 
-        {/* RIGHT (~25%): Stage 10, 12 & 14 — Drawer with Bob Explainer, Handoff Drawer,
+        {/* RIGHT (~25%): Drawer with Bob Explainer, Handoff Drawer,
             ModelLens Remediation, and Handoff Summary */}
         <div className="w-full lg:w-[25%] min-h-[180px] lg:min-h-0 min-w-[240px] flex flex-col overflow-hidden border-l border-slate-800 bg-slate-950/30">
           {/* Drawer View Navigation Tabs */}
@@ -527,7 +527,7 @@ export default function TracePlayer({
                       ? 'bg-amber-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
-                  title="Stage 10 Safe Insertion Hooks"
+                  title="Safe Insertion Hooks"
                 >
                   <span className="text-amber-400 font-bold leading-none">★</span>
                   <span>Safe Hooks</span>
@@ -541,7 +541,7 @@ export default function TracePlayer({
                 </button>
               )}
 
-              {/* Stage 14: ModelLens remediation — only in model_lens mode */}
+              {/* ModelLens remediation — only in model_lens mode */}
               {isModelLens && (
                 <button
                   type="button"
@@ -551,7 +551,7 @@ export default function TracePlayer({
                       ? 'bg-rose-500 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
-                  title="Stage 14 ModelLens Remediation — click a hazard marker in the gutter"
+                  title="ModelLens Remediation — click a hazard marker in the gutter"
                 >
                   <span className="text-rose-400 font-bold leading-none">☠</span>
                   <span>Audit</span>
@@ -573,7 +573,7 @@ export default function TracePlayer({
                     ? 'bg-indigo-500 text-slate-950 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="Stage 14 Appendix B.2 Teammate Handoff Summary"
+                title="Teammate Handoff Summary"
               >
                 📋 Summary
               </button>
@@ -610,7 +610,7 @@ export default function TracePlayer({
               />
             )}
 
-            {/* Stage 14: ModelLens remediation panel */}
+            {/* ModelLens remediation panel */}
             {drawerTab === 'audit' && isModelLens && (
               <MLRemediationPanel
                 issues={auditIssues}
@@ -621,7 +621,7 @@ export default function TracePlayer({
               />
             )}
 
-            {/* Stage 14: Appendix B.2 handoff summary (both modes) */}
+            {/* Teammate handoff summary (both modes) */}
             {drawerTab === 'summary' && (
               <HandoffSummaryPane
                 code={code}
@@ -635,7 +635,7 @@ export default function TracePlayer({
         </div>
       </div>
 
-      {/* Stage 14: Bob AI Remediation Confirmation & Diff Modal */}
+      {/* Bob AI Remediation Confirmation & Diff Modal */}
       <BobRemediationModal
         isOpen={bobModalOpen}
         onClose={() => setBobModalOpen(false)}

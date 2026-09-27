@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { postHandoffSummary, TraceApiError } from '../api/traceClient';
 
 /**
- * HandoffSummaryPane — Stage 14: Teammate Handoff Summary (Appendix B.2).
+ * HandoffSummaryPane — Teammate Handoff Summary.
  *
  * Available in BOTH modes. Calls POST /api/handoff-summary once and renders the
  * four Appendix B.2 fields:

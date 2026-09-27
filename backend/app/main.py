@@ -1,5 +1,5 @@
 """
-TraceLens Backend Application - Stage 1 Scaffold.
+TraceLens Backend Application.
 """
 
 import logging
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="TraceLens API",
-    description="TraceLens Monorepo & Deployment Scaffold",
+    description="TraceLens Runtime Code Tracer & DSAI Auditor API",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -60,7 +60,7 @@ def root():
 
 @app.get("/health")
 def health():
-    """Health check route returning status ok per Stage 1 specification."""
+    """Health check route returning status ok."""
     return {"status": "ok"}
 
 

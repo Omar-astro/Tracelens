@@ -2,7 +2,7 @@ import React from 'react';
 import confetti from 'canvas-confetti';
 
 /**
- * BobRemediationModal — Stage 14: Bob AI ModelLens Remediation Confirmation & Diff Modal.
+ * BobRemediationModal — Bob AI ModelLens Remediation Confirmation & Diff Modal.
  *
  * Displays Bob's AI refactoring of the user's code:
  * - Bob's explanation of the fix

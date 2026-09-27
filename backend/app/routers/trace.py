@@ -1,12 +1,12 @@
 """
-trace.py — Stage 5 & 9: Real /api/trace Endpoint with Safe Insertion Analyzer.
+trace.py — Execution Tracing & Safe Insertion Endpoint.
 
 Execution tracing pipeline:
 1. Ingestion and source code normalization.
 2. AST control-flow pre-pass (ast_flow.py) to validate syntax and index loop/branch headers.
 3. Sandboxed deterministic execution tracer (sandbox.py + tracer.py) under strict resource
    limits, timeouts, and restricted builtins.
-4. Schema-compliant response conforming field-for-field to TraceStep (Appendix A).
+4. Schema-compliant response conforming field-for-field to TraceStep contract.
 5. Safe Insertion Analyzer (handoff_analyzer.py) computing variable lifecycles and safe hooks.
 """
 
@@ -180,7 +180,7 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
     # Strip and normalize incoming code
     code = raw_code.replace("\r\n", "\n").replace("\r", "\n").strip()
 
-    # AST Control-Flow Pre-Pass (Stage 3): validate syntax and map structure
+    # AST Control-Flow Pre-Pass: validate syntax and map structure
     try:
         _ = build_flow_index(code)
     except SyntaxError as exc:
@@ -215,7 +215,7 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
     except Exception:
         pass
 
-    # Run execution in the deterministic sandboxed environment (Stage 4)
+    # Run execution in the deterministic sandboxed environment
     res = trace_in_sandbox(code, max_steps=effective_max_steps)
 
     # Clean error handling
@@ -262,11 +262,11 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
             detail=res.error or "Execution error in sandbox.",
         )
 
-    # Compute safe insertion points across completed trace (Stage 9)
+    # Compute safe insertion points across completed trace
     # Disabled in model_lens mode per requirement
     safe_points = [] if payload.mode == "model_lens" else find_safe_insertion_points(res.steps, code)
 
-    # Stage 13: ModelLens Diagnostics Engine pass when mode == "model_lens"
+    # ModelLens Diagnostics Engine pass when mode == "model_lens"
     ml_issues = None
     if payload.mode == "model_lens":
         ml_issues = run_ml_diagnostics(res.steps, code)

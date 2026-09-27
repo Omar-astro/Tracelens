@@ -1,6 +1,5 @@
 /**
- * traceClient.js — Stage 6: Frontend↔Backend API client.
- * Stage 14: adds the Appendix B.2 handoff summary call.
+ * traceClient.js — Frontend↔Backend API client.
  *
  * Exports:
  *   postTrace(code, mode, maxSteps)   -> POST /api/trace
@@ -107,10 +106,10 @@ export async function postTrace(code, mode = "logic_lens", maxSteps = undefined)
 }
 
 /**
- * Request an AI-powered contextual line intent explanation for a single trace step (Stage 12).
+ * Request an AI-powered contextual line intent explanation for a single trace step.
  *
  * Calls POST {API_BASE_URL}/api/explain-step with the current step's execution context.
- * Returns parsed StepExplanation JSON per Appendix A.
+ * Returns parsed StepExplanation JSON per data contract.
  *
  * @param {object} stepContext  The current step context
  * @param {number} stepContext.step_id
@@ -138,15 +137,15 @@ export async function explainStep(stepContext) {
 }
 
 /**
- * Request the end-of-trace teammate handoff summary (Stage 14, Appendix B.2).
+ * Request the end-of-trace teammate handoff summary.
  *
  * Calls POST {API_BASE_URL}/api/handoff-summary once the trace is complete.
- * Returns a HandoffSummary per Appendix A: overall_purpose, key_data_structures,
+ * Returns a HandoffSummary: overall_purpose, key_data_structures,
  * safe_continuation_strategy, cautions_for_teammate.
  *
  * @param {object} params
  * @param {string} params.code                      Full traced source
- * @param {object[]} [params.safeInsertionPoints]   Stage 9 safe insertion points
+ * @param {object[]} [params.safeInsertionPoints]   Safe insertion points
  * @param {object} [params.terminalVariables]       Final frame variables from the last step
  * @returns {Promise<import("../types").HandoffSummary>}
  * @throws {TraceApiError}

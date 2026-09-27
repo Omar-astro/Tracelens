@@ -1,5 +1,5 @@
 """
-ast_flow.py — Stage 3: AST Control-Flow Pre-Pass
+ast_flow.py — AST Control-Flow Pre-Pass
 
 Pure, standalone module.  No I/O, no side effects, no FastAPI dependency.
 
@@ -133,7 +133,7 @@ def build_flow_index(code: str) -> FlowIndex:
 
     Both dicts are keyed by the integer line number of the construct's
     header (the `for`/`while`/`if` keyword line), sorted in ascending line order.
-    Also builds `line_to_loop` for O(1) loop-context lookups during Stage 4 tracing.
+    Also builds `line_to_loop` for O(1) loop-context lookups during execution tracing.
     """
     tree = ast.parse(code)
     loops: dict = {}

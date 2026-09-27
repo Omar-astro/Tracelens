@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * ModeSelector component for TraceLens intake.
- * Stage 2: Radio-style toggle between LogicLens (default/selected) and ModelLens.
+ * Radio-style toggle between LogicLens (general Python) and ModelLens (data science & ML).
  */
 export default function ModeSelector({ mode = 'logic_lens', onChange }) {
   return (

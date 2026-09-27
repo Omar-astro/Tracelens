@@ -287,7 +287,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
   }, [initialCode]);
 
 
-  // Stage 6: real network state
+  // Network & execution state
   const [isLoading, setIsLoading] = useState(false);
   const [traceError, setTraceError] = useState(null);    // string | null
   const [traceSteps, setTraceSteps] = useState(null);    // TraceStep[] | null
@@ -370,7 +370,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     handleToggleSample();
   };
 
-  // Stage 14: Appendix C.2 ModelLens sample — switch caller to ModelLens
+  // ModelLens sample — switch caller to ModelLens
   const handleLoadLeakageSample = () => {
     if (onRequestMode) onRequestMode('model_lens');
     setCode(DSAI_LEAKAGE_SAMPLE);
@@ -446,7 +446,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     }
   };
 
-  // Stage 6: Real network call to POST /api/trace
+  // Real network call to POST /api/trace
   const handleTraceClick = async () => {
     if (!code.trim()) return;
 
@@ -496,9 +496,9 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       const response = await postTrace(code, mode);
       // Backend returns { steps, safe_insertion_points, ml_audit_issues? }
       const steps = response.steps ?? [];
-      // Stage 10: safe insertion points from backend (Stage 9)
+      // Safe insertion points from backend
       const safePoints = response.safe_insertion_points ?? [];
-      // Stage 14: ModelLens audit issues — only present in model_lens mode
+      // ModelLens audit issues — only present in model_lens mode
       const mlIssues = response.ml_audit_issues ?? [];
       setTraceSteps(steps);
 
@@ -1116,7 +1116,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
         </div>
       </div>
 
-      {/* Stage 6: Error state */}
+      {/* Error state */}
       {traceError && (
         <div className="mt-4 p-3.5 rounded-xl bg-red-950/30 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
           <span className="mt-0.5 shrink-0 w-4 h-4 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center font-bold">!</span>
@@ -1127,7 +1127,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
         </div>
       )}
 
-      {/* Stage 6: Success banner — raw step count (Stage 7 will replace with Studio view) */}
+      {/* Success banner — raw step count */}
       {traceSteps && !traceError && (
         <div className="mt-4 p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1141,7 +1141,6 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           </span>
         </div>
       )}
-      {/* TODO(stage-7): Replace success banner with Studio workspace view */}
     </div>
   );
 }

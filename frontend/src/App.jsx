@@ -18,11 +18,10 @@ export default function App() {
   // Trace state lifted from CodeInputPane via onTraceComplete
   const [traceSteps, setTraceSteps] = useState(null);               // TraceStep[] | null
   const [sourceCode, setSourceCode] = useState('');                 // last traced source.
-  const [sourceName, setSourceName] = useState('Code Editor');       // 'Code Editor' | file name | 'Sample Script'
-  const [safeInsertionPoints, setSafeInsertionPoints] = useState([]); // Stage 10
-  // Stage 14: ModelLens audit issues from the Stage 13 engine (model_lens mode only)
+  const [safeInsertionPoints, setSafeInsertionPoints] = useState([]);
+  // ModelLens audit issues (model_lens mode only)
   const [mlAuditIssues, setMlAuditIssues] = useState([]);
-  // Stage 14: Appendix B.2 handoff summary — cached one-per-trace so the drawer
+  // Teammate handoff summary — cached one-per-trace so the drawer
   // renders instantly on re-open and never re-calls the LLM.
   const [handoffSummary, setHandoffSummary] = useState(null);
 

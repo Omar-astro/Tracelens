@@ -1,10 +1,10 @@
 """
-tracer.py — Stage 4: Deterministic Tracer
+tracer.py — Deterministic Tracer
 
 Exposes one public function:
     trace_execution(code: str, flow_index: Optional[FlowIndex] = None, max_steps: int = 300) -> List[dict]
 
-Each dict matches the TraceStep data contract from Appendix A.
+Each dict matches the TraceStep data contract.
 """
 
 import sys
@@ -13,7 +13,7 @@ import copy
 from typing import Optional, List, Any, Callable, Dict
 
 # ---------------------------------------------------------------------------
-# Bring in Stage 3's FlowIndex (optional import — tracer still works standalone)
+# FlowIndex imports (optional import — tracer still works standalone)
 # ---------------------------------------------------------------------------
 try:
     from backend.app.services.ast_flow import build_flow_index

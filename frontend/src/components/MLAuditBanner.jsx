@@ -2,9 +2,9 @@ import React, { useMemo } from 'react';
 import { SEVERITY_META, CATEGORY_LABELS, groupBySeverity } from './mlAuditMeta';
 
 /**
- * MLAuditBanner — Stage 14: Sticky ModelLens Risk Banner.
+ * MLAuditBanner — Sticky ModelLens Risk Banner.
  *
- * Renders only in "model_lens" mode. Shows the total Stage 13 issue count, a
+ * Renders only in "model_lens" mode. Shows the total issue count, a
  * clickable per-severity breakdown that filters the issue list, and a category
  * legend. Provides an emerald all-clear state when the audit found nothing.
  *

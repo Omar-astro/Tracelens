@@ -43,7 +43,7 @@ except ImportError:  # POSIX only; Windows has no resource module.
 #: against this exact string, so it must stay in sync with Stage 4.1.
 TRACELENS_FILENAME = "<tracelens_user_code>"
 
-SANDBOX_TIMEOUT_SECONDS = 8.0
+SANDBOX_TIMEOUT_SECONDS = 30.0
 MAX_STEPS_DEFAULT = 1000
 MEMORY_LIMIT_MB = 256
 STDOUT_LIMIT_CHARS = 64 * 1024
@@ -402,6 +402,19 @@ def _worker(
                 },
             ),
         )
+        # Ensure user code (e.g. pd.read_csv('housing 2.csv')) can find uploaded datasets
+        for candidate in (
+            os.environ.get("TRACELENS_UPLOAD_DIR"),
+            os.path.abspath("uploaded_datasets"),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "uploaded_datasets")),
+        ):
+            if candidate and os.path.isdir(candidate):
+                try:
+                    os.chdir(candidate)
+                    break
+                except Exception:
+                    pass
+
         compiled = compile(code, filename, "exec")
         sys.settrace(_resolve_tracer(tracer_ref)(ctx))
         entered_exec = True

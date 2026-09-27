@@ -21,6 +21,8 @@ export default function MLRemediationPanel({
   issues = [],
   selectedIssue = null,
   onSelectIssue,
+  onApplyWithBob,
+  isApplyingWithBob = false,
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -177,7 +179,50 @@ export default function MLRemediationPanel({
           tone="safe"
           onCopy={() => handleCopy(selectedIssue.remediation_code)}
           copied={copied}
+          onApply={onApplyWithBob ? () => onApplyWithBob(selectedIssue) : null}
+          isApplying={isApplyingWithBob}
         />
+
+        {/* Stage 14: Bob AI Code Refactor Action */}
+        {onApplyWithBob && (
+          <div className="flex flex-col gap-2 p-3 rounded-lg bg-gradient-to-br from-indigo-950/40 via-slate-900/60 to-cyan-950/40 border border-cyan-500/30 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-cyan-400 font-bold text-xs">⚡</span>
+                <span className="text-[11px] font-mono font-bold text-slate-200">
+                  Bob AI Refactor
+                </span>
+              </div>
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold uppercase">
+                Methodology Fix
+              </span>
+            </div>
+
+            <p className="text-[10px] text-slate-400 leading-normal font-sans">
+              Apply this verified pattern to your code to eliminate the methodology flaw using Bob AI.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => onApplyWithBob(selectedIssue)}
+              disabled={isApplyingWithBob}
+              className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-400 hover:from-cyan-300 hover:to-indigo-300 text-slate-950 font-mono font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-cyan-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isApplyingWithBob ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <span>Refactoring with Bob...</span>
+                </>
+              ) : (
+                <>
+                  <span>⚡</span>
+                  <span>Apply Correct Pattern with Bob</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
 
         {/* Why it matters */}
         {selectedIssue.explanation && (
@@ -225,7 +270,7 @@ function PanelHeader({ issueCount, onBack }) {
   );
 }
 
-function CodeBlock({ label, code, tone, onCopy, copied }) {
+function CodeBlock({ label, code, tone, onCopy, copied, onApply, isApplying }) {
   if (!code) return null;
   const toneClasses =
     tone === 'danger'
@@ -239,16 +284,30 @@ function CodeBlock({ label, code, tone, onCopy, copied }) {
         <span className={`text-[10px] font-mono uppercase tracking-wider ${labelColor}`}>
           {label}
         </span>
-        {onCopy && (
-          <button
-            type="button"
-            onClick={onCopy}
-            className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold text-slate-400 hover:text-emerald-300 hover:bg-slate-700/60 transition-colors cursor-pointer"
-            title="Copy to clipboard"
-          >
-            {copied ? '✓ Copied' : 'Copy'}
-          </button>
-        )}
+        <div className="flex items-center gap-1.5">
+          {onApply && (
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={isApplying}
+              className="px-2 py-0.5 rounded text-[10px] font-mono font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-indigo-400 hover:from-cyan-300 hover:to-indigo-300 transition-colors cursor-pointer flex items-center gap-1 shadow-sm disabled:opacity-50"
+              title="Apply this corrected pattern with Bob AI"
+            >
+              <span>⚡</span>
+              <span>{isApplying ? 'Applying...' : 'Apply with Bob'}</span>
+            </button>
+          )}
+          {onCopy && (
+            <button
+              type="button"
+              onClick={onCopy}
+              className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold text-slate-400 hover:text-emerald-300 hover:bg-slate-700/60 transition-colors cursor-pointer"
+              title="Copy to clipboard"
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          )}
+        </div>
       </div>
       <pre className="p-2.5 text-[11px] font-mono text-slate-200 leading-5 overflow-x-auto whitespace-pre">
         {code}

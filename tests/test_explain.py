@@ -34,6 +34,8 @@ try:
         generate_handoff_summary,
         generate_fallback_handoff_summary,
         build_b2_prompt,
+        BobRemediationResult,
+        apply_bob_remediation,
     )
 except ImportError:
     from app.main import app
@@ -46,6 +48,8 @@ except ImportError:
         generate_handoff_summary,
         generate_fallback_handoff_summary,
         build_b2_prompt,
+        BobRemediationResult,
+        apply_bob_remediation,
     )
 
 client = TestClient(app)
@@ -341,4 +345,54 @@ def test_api_handoff_summary_empty_code():
     response = client.post("/api/handoff-summary", json=payload)
     assert response.status_code == 400
     assert "code must be a non-empty string" in response.json()["detail"]
+
+
+def test_apply_bob_remediation_data_leakage():
+    """Verify Bob refactoring eliminates data leakage on dsai sample."""
+    sample_code = """import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+X = np.random.randn(100, 4)
+y = np.array([0] * 90 + [1] * 10)
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+"""
+    issue = {
+        "issue_id": "test-leakage",
+        "category": "data_leakage",
+        "line_number": 9,
+        "offending_code": "scaler.fit_transform(X)",
+        "remediation_code": "X_train, X_test, y_train, y_test = train_test_split(X, y)",
+        "title": "Data Leakage: Preprocessor fit before train/test split",
+    }
+    res = apply_bob_remediation(sample_code, issue)
+    assert isinstance(res, BobRemediationResult)
+    assert res.applied is True
+    assert "train_test_split(X, y" in res.patched_code
+    assert "scaler.fit_transform(X_train)" in res.patched_code
+    assert "Bob refactored" in res.explanation
+
+
+def test_api_bob_apply_remediation_endpoint():
+    """Test POST /api/bob-apply-remediation endpoint."""
+    sample_code = "import numpy as np\nX = np.random.randn(10, 2)\n"
+    issue = {
+        "issue_id": "test-1",
+        "category": "metric_mismatch",
+        "line_number": 2,
+        "offending_code": "",
+        "remediation_code": "",
+        "title": "Metric Mismatch",
+    }
+    resp = client.post("/api/bob-apply-remediation", json={"code": sample_code, "issue": issue})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "patched_code" in data
+    assert "explanation" in data
+    assert "applied" in data
+
 

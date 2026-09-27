@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { postTrace, TraceApiError } from '../api/traceClient';
+import React, { useState, useRef, useEffect } from 'react';
+import { postTrace, TraceApiError, uploadDataset, getDatasets, deleteDataset } from '../api/traceClient';
 
 // Appendix C.1 — teammate_pipeline.py (Mode 1 primary demo sample)
 const TEAMMATE_PIPELINE_SAMPLE = `# teammate_pipeline.py — Inherited from "Alex" (Teammate)
@@ -53,17 +53,69 @@ X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
 
 print("Dataset ready. Train size:", len(X_train))`;
 
-export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, onRequestMode }) {
+export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, onRequestMode, initialCode = '' }) {
   // Tabs: 'editor' (Tab A), 'dropzone' (Tab B), 'sample' (Tab C)
   const [activeTab, setActiveTab] = useState('editor');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(initialCode || '');
   const [loadedFileName, setLoadedFileName] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+
+  useEffect(() => {
+    if (initialCode) {
+      setCode(initialCode);
+    }
+  }, [initialCode]);
+
 
   // Stage 6: real network state
   const [isLoading, setIsLoading] = useState(false);
   const [traceError, setTraceError] = useState(null);    // string | null
   const [traceSteps, setTraceSteps] = useState(null);    // TraceStep[] | null
+
+  // Dataset upload state (100MB limit, 20m retention)
+  const [uploadedDatasets, setUploadedDatasets] = useState([]);
+  const [isUploadingDataset, setIsUploadingDataset] = useState(false);
+  const [datasetError, setDatasetError] = useState(null);
+  const [datasetSuccess, setDatasetSuccess] = useState(null);
+
+  const fetchDatasets = async () => {
+    try {
+      const res = await getDatasets();
+      if (Array.isArray(res?.datasets)) {
+        setUploadedDatasets(res.datasets);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchDatasets();
+    const interval = setInterval(fetchDatasets, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleDatasetUpload = async (file) => {
+    if (!file) return;
+    setDatasetError(null);
+    setDatasetSuccess(null);
+    setIsUploadingDataset(true);
+
+    try {
+      const res = await uploadDataset(file);
+      setDatasetSuccess(res.message || `Uploaded ${file.name} successfully.`);
+      await fetchDatasets();
+    } catch (err) {
+      setDatasetError(err.message || 'Failed to upload dataset.');
+    } finally {
+      setIsUploadingDataset(false);
+    }
+  };
+
+  const handleDeleteDataset = async (filename) => {
+    await deleteDataset(filename);
+    await fetchDatasets();
+  };
 
   const textareaRef = useRef(null);
   const lineNumbersRef = useRef(null);
@@ -207,6 +259,24 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           >
             Tab C: Sample Script
           </button>
+
+          {/* Tab D: Upload Dataset */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('dataset')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all flex items-center gap-1.5 ${
+              activeTab === 'dataset'
+                ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <span>Tab D: Upload Dataset</span>
+            {uploadedDatasets.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-300 font-mono font-bold">
+                {uploadedDatasets.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Quick action button for Sample Teammate Script */}
@@ -344,13 +414,182 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
         </div>
       )}
 
+      {/* Tab D: Dataset Upload (.csv, .parquet, .json, etc.) */}
+      {activeTab === 'dataset' && (
+        <div className="flex flex-col gap-4 text-left">
+          {/* Policy & Guidance Banner */}
+          <div className="p-4 rounded-xl border border-cyan-500/20 bg-cyan-950/20 flex items-start gap-3">
+            <span className="text-xl">📊</span>
+            <div className="text-xs space-y-1">
+              <h4 className="font-bold text-slate-200">Session Dataset Storage</h4>
+              <p className="text-slate-400 leading-relaxed">
+                Upload external dataset files (<code className="text-cyan-300 font-mono">.csv</code>, <code className="text-cyan-300 font-mono">.parquet</code>, <code className="text-cyan-300 font-mono">.json</code>, <code className="text-cyan-300 font-mono">.xlsx</code>). 
+                Once uploaded, your Python script can access it directly by filename (e.g. <code className="text-cyan-300 font-mono">pd.read_csv('housing 2.csv')</code>).
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] font-mono text-cyan-400/90">
+                <span>⚡ Max file size: <strong>100 MB</strong></span>
+                <span>⏱ Auto-deleted after: <strong>20 minutes</strong> (or when removed)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload Dropzone */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragOver(true);
+            }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragOver(false);
+              const f = e.dataTransfer?.files?.[0];
+              if (f) handleDatasetUpload(f);
+            }}
+            className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
+              isDragOver
+                ? 'border-cyan-400 bg-cyan-950/20'
+                : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+            }`}
+          >
+            <div className="max-w-md mx-auto flex flex-col items-center">
+              <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 text-lg mb-2">
+                📁
+              </div>
+              <h3 className="text-xs font-semibold text-slate-200 mb-1">
+                Select or Drop Dataset File (.csv, .parquet, .json, .xlsx)
+              </h3>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Max size: 100 MB · Retained for 20 minutes
+              </p>
+              <label
+                className={`cursor-pointer px-4 py-2 rounded-lg text-xs font-semibold text-slate-200 border border-slate-700 transition-colors inline-flex items-center gap-1.5 ${
+                  isUploadingDataset ? 'bg-slate-800 opacity-50 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-700'
+                }`}
+              >
+                {isUploadingDataset ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                    <span>Uploading Dataset…</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Browse Dataset</span>
+                    <input
+                      type="file"
+                      accept=".csv,.parquet,.json,.tsv,.txt,.xlsx,.feather,.h5"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleDatasetUpload(f);
+                        e.target.value = '';
+                      }}
+                      disabled={isUploadingDataset}
+                      className="hidden"
+                    />
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+
+          {/* Feedback messages */}
+          {datasetSuccess && (
+            <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
+              <span>✓ {datasetSuccess}</span>
+              <button
+                type="button"
+                onClick={() => setDatasetSuccess(null)}
+                className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {datasetError && (
+            <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/30 text-red-300 text-xs flex items-center justify-between">
+              <span>⚠ {datasetError}</span>
+              <button
+                type="button"
+                onClick={() => setDatasetError(null)}
+                className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* List of currently active uploaded datasets */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-mono font-semibold text-slate-400 uppercase tracking-wider">
+              Active Uploaded Datasets ({uploadedDatasets.length})
+            </h4>
+
+            {uploadedDatasets.length === 0 ? (
+              <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-950/30 text-center text-xs text-slate-500 font-mono">
+                No active datasets uploaded yet. Upload a file above to make it available to your scripts.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {uploadedDatasets.map((ds) => (
+                  <div
+                    key={ds.filename}
+                    className="p-3 rounded-xl border border-slate-800 bg-slate-950/80 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">📄</span>
+                      <div>
+                        <div className="font-mono font-bold text-slate-100 flex items-center gap-2">
+                          <span>{ds.filename}</span>
+                          <span className="text-[10px] font-normal text-slate-400 font-mono">
+                            ({ds.size_mb > 0 ? `${ds.size_mb} MB` : `${ds.size_bytes} B`})
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          In Python:{' '}
+                          <code className="text-cyan-300 font-mono bg-slate-900 px-1 py-0.5 rounded border border-slate-800">
+                            pd.read_csv('{ds.filename}')
+                          </code>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-mono text-amber-400/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                        <span>⏱</span>
+                        <span>Auto-deletes in ~{Math.ceil(ds.remaining_minutes)}m</span>
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDataset(ds.filename)}
+                        className="px-2.5 py-1 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-red-300 text-xs font-mono transition-colors cursor-pointer"
+                        title="Delete dataset now"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Footer Details & Primary Action Button */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-800/80">
-        <div className="text-xs text-slate-500 font-mono">
+        <div className="text-xs text-slate-500 font-mono flex items-center gap-2.5 flex-wrap">
           {loadedFileName ? (
             <span className="text-cyan-400">File: {loadedFileName}</span>
           ) : (
             <span>Ready for analysis • Mode: {mode}</span>
+          )}
+          {uploadedDatasets.length > 0 && (
+            <span className="text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+              <span>📊</span>
+              <span>Dataset: {uploadedDatasets[0].filename} ({uploadedDatasets[0].size_mb > 0 ? `${uploadedDatasets[0].size_mb} MB` : `${uploadedDatasets[0].size_bytes} B`})</span>
+            </span>
           )}
         </div>
 

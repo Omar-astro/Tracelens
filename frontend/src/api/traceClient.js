@@ -164,3 +164,115 @@ export async function postHandoffSummary({ code, safeInsertionPoints = [], termi
   });
 }
 
+/**
+ * Upload a dataset file (.csv, .parquet, .json, etc.) up to 100MB.
+ *
+ * @param {File} file
+ * @returns {Promise<{filename: string, size_bytes: number, size_mb: number, expires_in_minutes: number, message: string}>}
+ */
+export async function uploadDataset(file) {
+  if (!file) {
+    throw new TraceApiError("No file selected for upload.", 400);
+  }
+
+  const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+  if (file.size > MAX_BYTES) {
+    throw new TraceApiError(
+      `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 100 MB limit.`,
+      413
+    );
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/upload-dataset`, {
+      method: "POST",
+      body: formData,
+    });
+  } catch {
+    throw new TraceApiError(
+      `Network error: could not reach backend at ${API_BASE_URL}.`,
+      null
+    );
+  }
+
+  if (!response.ok) {
+    let detail = `Upload failed with status ${response.status}`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.detail) detail = String(errJson.detail);
+    } catch {
+      // ignore
+    }
+    throw new TraceApiError(detail, response.status);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Retrieve active uploaded datasets and their remaining lifetime.
+ */
+export async function getDatasets() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/datasets`);
+    if (!res.ok) return { datasets: [] };
+    return await res.json();
+  } catch {
+    return { datasets: [] };
+  }
+}
+
+/**
+ * Delete an uploaded dataset by filename.
+ */
+export async function deleteDataset(filename) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/datasets/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clear all uploaded datasets.
+ */
+export async function clearDatasets() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/datasets/clear`, {
+      method: "POST",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Request Bob AI to refactor code and apply an ML methodology remediation pattern.
+ *
+ * Calls POST /api/bob-apply-remediation.
+ * Returns { patched_code: string, explanation: string, applied: boolean, category: string }.
+ *
+ * @param {string} code Current Python source code
+ * @param {object} issue The ModelLens MLAuditIssue object
+ * @returns {Promise<{patched_code: string, explanation: string, applied: boolean, category: string}>}
+ */
+export async function applyBobRemediation(code, issue) {
+  if (typeof code !== "string" || !code.trim()) {
+    throw new TraceApiError("Invalid code provided for Bob remediation.", 400);
+  }
+  return await postJson("/api/bob-apply-remediation", {
+    code,
+    issue: issue || {},
+  });
+}
+
+
+

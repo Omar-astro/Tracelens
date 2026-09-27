@@ -187,7 +187,7 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
     # Determine execution step cap:
     # If explicitly supplied, respect it.
     # Otherwise, default to 300; if an infinite loop pattern like `while True` is detected,
-    # lift step cap so that the sandbox 8s wall-clock timeout acts as the definitive guard.
+    # lift step cap so that the sandbox 30s wall-clock timeout acts as the definitive guard.
     if payload.max_steps is not None:
         effective_max_steps = payload.max_steps
     elif "while True" in code or "while 1" in code:
@@ -204,7 +204,7 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
     if res.status == STATUS_TIMEOUT or res.error_code == ERR_TIMEOUT:
         raise HTTPException(
             status_code=status.HTTP_408_REQUEST_TIMEOUT,
-            detail=res.error or "Execution exceeded the 8s time limit and was terminated.",
+            detail=res.error or "Execution exceeded the 30s time limit and was terminated.",
         )
 
     if res.error_code == ERR_MAX_STEPS:

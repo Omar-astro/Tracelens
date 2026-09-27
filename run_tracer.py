@@ -6,8 +6,8 @@ from backend.app.services.sandbox import trace_in_sandbox
 def run_script(script_path: str):
     code = Path(script_path).read_text(encoding="utf-8")
     
-    # Executes under isolated subprocess + 8s hard timeout + blocked os/socket/open + delta tracer
-    result = trace_in_sandbox(code, timeout=8.0)
+    # Executes under isolated subprocess + 30s hard timeout + blocked os/socket/open + delta tracer
+    result = trace_in_sandbox(code, timeout=30.0)
     
     print(f"=== Execution Status: {result.status.upper()} ===")
     if result.stdout:

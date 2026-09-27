@@ -318,7 +318,20 @@ export default function BobExplainerPane({
         {/* Content View: StepExplanation */}
         {!loading && !error && explanation && (
           <div className="space-y-3">
-            {/* 1. Intent Summary */}
+            {/* 1. Logic Note (Generic, moved to top) */}
+            <div className="p-3 rounded-lg bg-indigo-950/15 border border-indigo-500/20 space-y-1.5 shadow-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-indigo-400 text-xs font-mono">🧠</span>
+                <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-indigo-300">
+                  Logic Note
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {explanation.teammate_logic_note}
+              </p>
+            </div>
+
+            {/* 2. Intent Summary */}
             <div className="p-3 rounded-lg bg-gradient-to-br from-cyan-950/20 via-slate-900/60 to-indigo-950/20 border border-cyan-500/25 shadow-sm">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-cyan-400">
@@ -342,26 +355,13 @@ export default function BobExplainerPane({
               </p>
             </div>
 
-            {/* 2. Detailed Explanation */}
+            {/* 3. Detailed Explanation */}
             <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800 space-y-1.5 shadow-sm">
               <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-slate-400">
                 Mechanical &amp; Logical Breakdown
               </span>
               <p className="text-xs text-slate-300 leading-relaxed">
                 {explanation.detailed_explanation}
-              </p>
-            </div>
-
-            {/* 3. Teammate Logic Note */}
-            <div className="p-3 rounded-lg bg-indigo-950/15 border border-indigo-500/20 space-y-1.5 shadow-sm">
-              <div className="flex items-center gap-1.5">
-                <span className="text-indigo-400 text-xs font-mono">👥</span>
-                <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-indigo-300">
-                  Teammate Logic Note
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {explanation.teammate_logic_note}
               </p>
             </div>
 

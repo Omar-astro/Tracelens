@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import ModeSelector from './components/ModeSelector';
 import CodeInputPane from './components/CodeInputPane';
 import TracePlayer from './components/TracePlayer';
+import { postTrace } from './api/traceClient';
 
 /**
  * TraceLens App — Stage 7: Studio Shell + Playback Scrubber.
@@ -48,6 +49,26 @@ export default function App() {
     setIsPlaying(false);
     setView('intake');
   }, []);
+
+  const handleApplyCodeFix = useCallback((newCode) => {
+    setSourceCode(newCode);
+  }, []);
+
+  const handleReTrace = useCallback(async (newCode) => {
+    setSourceCode(newCode);
+    try {
+      const res = await postTrace(newCode, mode);
+      handleTraceComplete(
+        res.steps,
+        newCode,
+        res.safe_insertion_points || [],
+        res.ml_audit_issues || []
+      );
+    } catch (err) {
+      console.error("Failed to re-trace patched code:", err);
+    }
+  }, [mode, handleTraceComplete]);
+
 
   // -------------------------------------------------------------------------
   // Studio view
@@ -123,6 +144,8 @@ export default function App() {
           mlAuditIssues={mlAuditIssues}
           handoffSummary={handoffSummary}
           onHandoffSummaryGenerated={handleHandoffSummaryGenerated}
+          onApplyCodeFix={handleApplyCodeFix}
+          onReTrace={handleReTrace}
         />
       </main>
     );
@@ -157,7 +180,9 @@ export default function App() {
         mode={mode}
         onTraceComplete={handleTraceComplete}
         onRequestMode={setMode}
+        initialCode={sourceCode}
       />
+
 
       <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
         TraceLens • Stage 14 ModelLens UI Active

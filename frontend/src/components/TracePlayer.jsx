@@ -8,6 +8,8 @@ import BobExplainerPane from './BobExplainerPane';
 import MLAuditBanner from './MLAuditBanner';
 import MLRemediationPanel from './MLRemediationPanel';
 import HandoffSummaryPane from './HandoffSummaryPane';
+import BobRemediationModal from './BobRemediationModal';
+import { applyBobRemediation } from '../api/traceClient';
 
 /**
  * TracePlayer — Stage 7: Studio Shell + Playback Scrubber.
@@ -35,14 +37,38 @@ export default function TracePlayer({
   mlAuditIssues = [],
   handoffSummary = null,
   onHandoffSummaryGenerated,
+  onApplyCodeFix,
+  onReTrace,
 }) {
   // Stage 10: tracks which SafeInsertionPoint the user clicked in the gutter
   const [selectedSafePoint, setSelectedSafePoint] = useState(null);
-  // Stage 12: Drawer tab view ('explainer' | 'hooks' | 'split')
-  // Stage 14: adds 'audit' and 'summary'
+  // Drawer tab view ('explainer' | 'hooks' | 'audit' | 'summary')
   const [drawerTab, setDrawerTab] = useState('explainer');
   // Stage 14: tracks which MLAuditIssue the user clicked in the hazard gutter
   const [selectedAuditIssue, setSelectedAuditIssue] = useState(null);
+
+  // Bob AI Remediation Modal & loading state
+  const [isApplyingBob, setIsApplyingBob] = useState(false);
+  const [bobPatchResult, setBobPatchResult] = useState(null);
+  const [bobModalOpen, setBobModalOpen] = useState(false);
+  const [bobTargetIssue, setBobTargetIssue] = useState(null);
+
+  const handleApplyWithBob = useCallback(async (issue) => {
+    if (!issue) return;
+    setIsApplyingBob(true);
+    setBobTargetIssue(issue);
+    try {
+      const res = await applyBobRemediation(code, issue);
+      setBobPatchResult(res);
+      setBobModalOpen(true);
+    } catch (err) {
+      console.error("Failed to apply Bob remediation:", err);
+      alert(err?.message || "Failed to generate Bob remediation.");
+    } finally {
+      setIsApplyingBob(false);
+    }
+  }, [code]);
+
 
   // When a new trace loads, drop any stale gutter selection so the drawer starts
   // clean. Adjusted during render rather than in an effect to avoid a cascading
@@ -504,19 +530,6 @@ export default function TracePlayer({
               >
                 📋 Summary
               </button>
-
-              <button
-                type="button"
-                onClick={() => setDrawerTab('split')}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
-                  drawerTab === 'split'
-                    ? 'bg-indigo-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Stacked View: Bob Explainer and Safe Hooks"
-              >
-                Split
-              </button>
             </div>
           </div>
 
@@ -548,6 +561,8 @@ export default function TracePlayer({
                 issues={auditIssues}
                 selectedIssue={selectedAuditIssue}
                 onSelectIssue={setSelectedAuditIssue}
+                onApplyWithBob={handleApplyWithBob}
+                isApplyingWithBob={isApplyingBob}
               />
             )}
 
@@ -561,31 +576,25 @@ export default function TracePlayer({
                 onSummaryGenerated={onHandoffSummaryGenerated}
               />
             )}
-
-            {drawerTab === 'split' && (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="h-1/2 min-h-[160px] border-b border-slate-800 overflow-hidden flex flex-col">
-                  <BobExplainerPane
-                    currentStep={currentStep}
-                    currentStepIndex={currentStepIndex}
-                    safeInsertionPoints={safeInsertionPoints}
-                    onSelectSafePoint={(pt) => {
-                      setSelectedSafePoint(pt);
-                    }}
-                  />
-                </div>
-                <div className="h-1/2 min-h-[160px] overflow-hidden flex flex-col">
-                  <HandoffDrawer
-                    selectedPoint={selectedSafePoint}
-                    safeInsertionPoints={safeInsertionPoints}
-                    onSelectPoint={setSelectedSafePoint}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Stage 14: Bob AI Remediation Confirmation & Diff Modal */}
+      <BobRemediationModal
+        isOpen={bobModalOpen}
+        onClose={() => setBobModalOpen(false)}
+        patchResult={bobPatchResult}
+        issue={bobTargetIssue}
+        onApplyAndRetrace={(patchedCode) => {
+          if (onReTrace) onReTrace(patchedCode);
+          else if (onApplyCodeFix) onApplyCodeFix(patchedCode);
+        }}
+        onApplyOnly={(patchedCode) => {
+          if (onApplyCodeFix) onApplyCodeFix(patchedCode);
+        }}
+      />
     </div>
   );
 }
+

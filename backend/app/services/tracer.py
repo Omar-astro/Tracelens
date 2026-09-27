@@ -339,7 +339,7 @@ def trace_execution(
     flow_index=None,    # Optional[FlowIndex]
     max_steps: int = 300,
     use_sandbox: bool = False,
-    timeout: float = 8.0,
+    timeout: float = 30.0,
 ) -> List[dict]:
     """Execute *code* under sys.settrace and return a list of TraceStep dicts.
 
@@ -350,7 +350,7 @@ def trace_execution(
                   If None and build_flow_index is available, it is built automatically.
     max_steps   : Maximum number of 'line' events to record (default 300).
     use_sandbox : If True, runs inside the safety subprocess sandbox.
-    timeout     : Hard timeout in seconds when running under the sandbox (default 8.0).
+    timeout     : Hard timeout in seconds when running under the sandbox (default 30.0).
 
     Returns
     -------

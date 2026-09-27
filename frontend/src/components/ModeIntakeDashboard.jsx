@@ -449,7 +449,7 @@ export default function ModeIntakeDashboard({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md pt-2 border-t border-surface-variant/20">
             <div className="flex items-center gap-2 text-outline font-mono text-[11px]">
               <span className="material-symbols-outlined text-[15px]">security</span>
-              <span>Sandboxed Execution: Hard timeout 8s • Restricted Namespace</span>
+              <span>Sandboxed Execution: Hard timeout 30s • Restricted Namespace</span>
             </div>
 
             <button

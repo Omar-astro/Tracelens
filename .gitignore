@@ -12,6 +12,7 @@
 .copilot/
 .cursor/
 .codeium/
+uploaded_datasets/
 
 # ============================================
 # CREDENTIALS AND SECRETS (CRITICAL)

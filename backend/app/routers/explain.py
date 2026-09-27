@@ -14,15 +14,19 @@ from pydantic import BaseModel, Field
 
 try:
     from backend.app.services.bob_client import (
+        BobRemediationResult,
         HandoffSummary,
         StepExplanation,
+        apply_bob_remediation,
         explain_step_in_context,
         generate_handoff_summary,
     )
 except ImportError:
     from app.services.bob_client import (
+        BobRemediationResult,
         HandoffSummary,
         StepExplanation,
+        apply_bob_remediation,
         explain_step_in_context,
         generate_handoff_summary,
     )
@@ -100,3 +104,27 @@ def handoff_summary(payload: HandoffSummaryRequest) -> HandoffSummary:
         safe_insertion_points=payload.safe_insertion_points,
         terminal_variables=payload.terminal_variables,
     )
+
+
+# ---------------------------------------------------------------------------
+# Request Model & POST /api/bob-apply-remediation Endpoint
+# ---------------------------------------------------------------------------
+
+class BobRemediationRequest(BaseModel):
+    code: str
+    issue: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/bob-apply-remediation", response_model=BobRemediationResult)
+def bob_remediate(payload: BobRemediationRequest) -> BobRemediationResult:
+    """
+    Accepts source code and a ModelLens MLAuditIssue finding.
+    Invokes Bob AI to refactor the code and apply the correct methodology pattern.
+    """
+    if not payload.code or not payload.code.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="code must be a non-empty string.",
+        )
+    return apply_bob_remediation(payload.code, payload.issue)
+

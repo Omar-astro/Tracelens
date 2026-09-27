@@ -311,6 +311,29 @@ export async function explainBlock({
   });
 }
 
+/**
+ * Retrieve the current dependency installation status from the backend.
+ * @returns {Promise<{is_installing: boolean, packages: string[], current_package: string|null, completed: string[], progress_pct: number, status_message: string}>}
+ */
+export async function getInstallStatus() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/install-status`);
+    if (!res.ok) return { is_installing: false, progress_pct: 0, packages: [], status_message: "" };
+    return await res.json();
+  } catch {
+    return { is_installing: false, progress_pct: 0, packages: [], status_message: "" };
+  }
+}
 
-
-
+/**
+ * Check which imported libraries in the code are not installed in the backend environment.
+ * @param {string} code
+ * @returns {Promise<{missing: string[], count: number}>}
+ */
+export async function checkDependencies(code) {
+  try {
+    return await postJson("/api/check-dependencies", { code });
+  } catch {
+    return { missing: [], count: 0 };
+  }
+}

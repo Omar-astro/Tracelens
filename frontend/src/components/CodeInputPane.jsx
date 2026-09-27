@@ -1,57 +1,213 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { postTrace, TraceApiError, uploadDataset, getDatasets, deleteDataset } from '../api/traceClient';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  postTrace,
+  TraceApiError,
+  uploadDataset,
+  getDatasets,
+  deleteDataset,
+  getInstallStatus,
+  checkDependencies,
+} from '../api/traceClient';
 
-// Appendix C.1 — teammate_pipeline.py (Mode 1 primary demo sample)
-const TEAMMATE_PIPELINE_SAMPLE = `# teammate_pipeline.py — Inherited from "Alex" (Teammate)
+// pipeline_tracer.py — LogicLens primary sample (multi-stage log triage with nested loops & early exits)
+const PIPELINE_TRACER_SAMPLE = `# pipeline_tracer.py — Multi-stage log triage for trace visualizers
+
 raw_logs = [
-    {"user": " alice ", "action": "login", "status": 200},
-    {"user": "bob", "action": "upload", "status": 500},
-    {"user": "", "action": "ping", "status": 200},
-    {"user": "charlie", "action": "logout", "status": 200}
+    {"user": " alice ", "status": 200, "ms": 45},
+    {"user": "",        "status": 200, "ms": 5},
+    {"user": "bob",     "status": 500, "ms": 1200},
+    {"user": "charlie", "status": 404, "ms": 310},
+    {"user": "dave",    "status": 200, "ms": 850},
 ]
 
-cleaned_records = []
-error_count = 0
+latency_tiers = [
+    ("CRITICAL", 1000),
+    ("WARNING", 300),
+]
 
-# Teammate loop: sanitize user records and count 500 errors
-for record in raw_logs:
-    name = record["user"].strip().capitalize()
-    if len(name) > 0:
-        if record["status"] >= 400:
-            error_count += 1
-        cleaned_records.append({
-            "user": name,
-            "action": record["action"],
-            "success": record["status"] < 400
-        })
+# Pass 1: Linear filter & sanitize (Guard clause)
+clean_logs = []
+for entry in raw_logs:
+    name = entry["user"].strip().capitalize()
+    if name:
+        clean_logs.append({"user": name, "status": entry["status"], "ms": entry["ms"]})
 
-# [SAFE INSERTION POINT: here]
-summary = {
-    "total_valid": len(cleaned_records),
-    "total_errors": error_count
-}
-print("Summary:", summary)
-`;
+# Pass 2: Nested loop (Rule matching with early exit)
+triage_flags = []
+for record in clean_logs:
+    for tier, limit in latency_tiers:
+        if record["ms"] >= limit:
+            triage_flags.append((record["user"], tier))
+            break
+
+# Pass 3: State aggregation (Branching logic)
+status_counts = {}
+error_users = []
+for record in clean_logs:
+    code = record["status"]
+    if code >= 400:
+        error_users.append(record["user"])
+    
+    if code in status_counts:
+        status_counts[code] += 1
+    else:
+        status_counts[code] = 1
+
+print("Cleaned:", len(clean_logs))
+print("Flags:", triage_flags)
+print("Status Counts:", status_counts)
+print("Errors:", error_users)`;
 
 // Appendix C.2 — dsai_leakage_sample.py (Mode 2 secondary demo sample).
 // NOTE: no leading or trailing blank line. The backend strips the source before
 // ast.parse (see trace.py) while CodeViewer renders it verbatim, so any leading
 // blank line would shift every reported line_number by one.
-const DSAI_LEAKAGE_SAMPLE = `# dsai_leakage_sample.py — Inherited from "Jordan" (Data Scientist)
-import numpy as np
-from sklearn.preprocessing import StandardScaler
+const DSAI_LEAKAGE_SAMPLE = `import numpy as np
+import pandas as pd
+from imblearn.over_sampling import SMOTE
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
-X = np.random.randn(100, 4)
-y = np.array([0] * 90 + [1] * 10)
+# -------------------------------------------------------------
+# 0. Simulate Raw Dataset (Sequential / Customer Churn Scenario)
+# -------------------------------------------------------------
+np.random.seed(42)
+n_rows = 1000
 
-# BUG: Data Leakage — Fitting scaler across entire dataset before splitting!
+df = pd.DataFrame(
+    {
+        "timestamp": pd.date_range("2024-01-01", periods=n_rows, freq="h"),
+        "customer_id": np.random.randint(100, 200, size=n_rows),  # Grouped entities
+        "income": np.random.normal(50000, 15000, size=n_rows),
+        "debt_ratio": np.random.uniform(0.1, 0.9, size=n_rows),
+        "category": np.random.choice(["Tier1", "Tier2", "Tier3"], size=n_rows),
+        "churn": np.random.binomial(1, 0.15, size=n_rows),  # 15% minority class
+    }
+)
+
+# Introduce 5% missingness in income
+df.loc[df.sample(frac=0.05, random_state=42).index, "income"] = np.nan
+
+# -------------------------------------------------------------
+# MISTAKE 1: Outlier removal based on global statistics
+# -------------------------------------------------------------
+mean_debt = df["debt_ratio"].mean()
+std_debt = df["debt_ratio"].std()
+df = df[df["debt_ratio"] < mean_debt + 3 * std_debt].copy()
+
+# -------------------------------------------------------------
+# MISTAKE 2: Global imputation before train/test split
+# -------------------------------------------------------------
+df["income"] = df["income"].fillna(df["income"].mean())
+
+# -------------------------------------------------------------
+# MISTAKE 3: Target Encoding across entire dataset
+# -------------------------------------------------------------
+target_enc = df.groupby("category")["churn"].mean()
+df["category_encoded"] = df["category"].map(target_enc)
+
+# -------------------------------------------------------------
+# MISTAKE 4: Feature Selection computed on entire dataset
+# -------------------------------------------------------------
+numeric_features = ["income", "debt_ratio", "category_encoded"]
+corr = df[numeric_features].corrwith(df["churn"]).abs()
+top_features = corr.nlargest(2).index.tolist()
+
+# -------------------------------------------------------------
+# MISTAKE 5: Global Feature Scaling
+# -------------------------------------------------------------
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+df[top_features] = scaler.fit_transform(df[top_features])
 
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2)
+# -------------------------------------------------------------
+# MISTAKE 6: Applying SMOTE / Oversampling BEFORE splitting
+# -------------------------------------------------------------
+X = df[top_features]
+y = df["churn"]
 
-print("Dataset ready. Train size:", len(X_train))`;
+smote = SMOTE(random_state=42)
+X_resampled, y_resampled = smote.fit_resample(X, y)
+
+# -------------------------------------------------------------
+# MISTAKE 7: Random split on temporal / grouped data
+# -------------------------------------------------------------
+X_train, X_test, y_train, y_test = train_test_split(
+    X_resampled, y_resampled, test_size=0.2, random_state=42, shuffle=True
+)
+
+# -------------------------------------------------------------
+# MISTAKE 8: Evaluating on oversampled test data & raw accuracy
+# -------------------------------------------------------------
+clf = RandomForestClassifier(random_state=42)
+clf.fit(X_train, y_train)
+
+y_pred = clf.predict(X_test)
+
+acc = accuracy_score(y_test, y_pred)
+print("Accuracy:", acc)
+print(classification_report(y_test, y_pred))`;
+
+// Sandbox security rules: constructs that cannot be traced
+const RESTRICTED_CONSTRUCTS = [
+  {
+    id: 'os',
+    name: 'os',
+    label: 'Operating System Access (os)',
+    pattern: /(?:^|\n)\s*(?:import\s+(?:[a-zA-Z0-9_]+,\s*)*os\b|from\s+os\b)/m,
+    description: 'Direct OS calls, process manipulation, and file paths are blocked in the sandbox.'
+  },
+  {
+    id: 'sys',
+    name: 'sys',
+    label: 'System Access (sys)',
+    pattern: /(?:^|\n)\s*(?:import\s+(?:[a-zA-Z0-9_]+,\s*)*sys\b|from\s+sys\b)/m,
+    description: 'System runtime manipulation and exit hooks are blocked.'
+  },
+  {
+    id: 'subprocess',
+    name: 'subprocess',
+    label: 'Process Execution (subprocess)',
+    pattern: /(?:^|\n)\s*(?:import\s+(?:[a-zA-Z0-9_]+,\s*)*subprocess\b|from\s+subprocess\b)/m,
+    description: 'Subprocess spawning and shell commands are forbidden.'
+  },
+  {
+    id: 'socket',
+    name: 'socket',
+    label: 'Network Socket Access (socket)',
+    pattern: /(?:^|\n)\s*(?:import\s+(?:[a-zA-Z0-9_]+,\s*)*socket\b|from\s+socket\b)/m,
+    description: 'Raw network socket creation is restricted.'
+  },
+  {
+    id: 'shutil',
+    name: 'shutil',
+    label: 'Filesystem Shell Utilities (shutil)',
+    pattern: /(?:^|\n)\s*(?:import\s+(?:[a-zA-Z0-9_]+,\s*)*shutil\b|from\s+shutil\b)/m,
+    description: 'Bulk file and directory manipulations are prohibited.'
+  },
+  {
+    id: 'ctypes',
+    name: 'ctypes',
+    label: 'Foreign Function Interface (ctypes)',
+    pattern: /(?:^|\n)\s*(?:import\s+(?:[a-zA-Z0-9_]+,\s*)*ctypes\b|from\s+ctypes\b)/m,
+    description: 'Direct memory access and C library loading are prohibited.'
+  },
+  {
+    id: 'threading',
+    name: 'threading / multiprocessing',
+    label: 'Concurrency (threading/multiprocessing)',
+    pattern: /(?:^|\n)\s*(?:import\s+(?:[a-zA-Z0-9_]+,\s*)*(?:threading|multiprocessing)\b|from\s+(?:threading|multiprocessing)\b)/m,
+    description: 'Spawning threads or child processes is restricted to ensure deterministic execution.'
+  },
+  {
+    id: 'open',
+    name: 'open()',
+    label: 'Direct File I/O (open)',
+    pattern: /(?<![a-zA-Z0-9_.])open\s*\(/,
+    description: 'Direct filesystem reading/writing via open() is blocked. Use the Upload Dataset tab and pd.read_csv(...) instead.'
+  },
+];
 
 export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, onRequestMode, initialCode = '' }) {
   // Tabs: 'editor', 'dropzone', 'sample', 'dataset'
@@ -65,14 +221,25 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
   const [sampleNotification, setSampleNotification] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Scan code for disallowed sandbox libraries / operations (Item 6)
+  const detectedRestricted = useMemo(() => {
+    if (!code || !code.trim()) return [];
+    return RESTRICTED_CONSTRUCTS.filter((item) => item.pattern.test(code));
+  }, [code]);
+
   const notificationTimeoutRef = useRef(null);
   const flashTimeoutRef = useRef(null);
   const prevModeRef = useRef(mode);
+
+  // Missing package installation progress state (Item 4 Update Bar)
+  const [installState, setInstallState] = useState(null);
+  const installPollRef = useRef(null);
 
   useEffect(() => {
     return () => {
       if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
       if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
+      if (installPollRef.current) clearInterval(installPollRef.current);
     };
   }, []);
 
@@ -95,8 +262,8 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
   useEffect(() => {
     if (prevModeRef.current !== mode) {
       if (isSampleActive) {
-        const nextCode = mode === 'model_lens' ? DSAI_LEAKAGE_SAMPLE : TEAMMATE_PIPELINE_SAMPLE;
-        const sampleName = mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'teammate_pipeline.py';
+        const nextCode = mode === 'model_lens' ? DSAI_LEAKAGE_SAMPLE : PIPELINE_TRACER_SAMPLE;
+        const sampleName = mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'pipeline_tracer.py';
         setCode(nextCode);
         setLoadedFileName(sampleName);
         setSourceType('sample');
@@ -106,7 +273,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
         triggerCodeFlash(
           mode === 'model_lens'
             ? '⚡ Switched to ModelLens Sample (dsai_leakage_sample.py)'
-            : '⚡ Switched to LogicLens Sample (teammate_pipeline.py)'
+            : '⚡ Switched to LogicLens Sample (pipeline_tracer.py)'
         );
       }
       prevModeRef.current = mode;
@@ -182,8 +349,8 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
 
   // Glowy Sample Script loader with mode-adaptive sample switching
   const handleToggleSample = () => {
-    const nextCode = mode === 'model_lens' ? DSAI_LEAKAGE_SAMPLE : TEAMMATE_PIPELINE_SAMPLE;
-    const sampleName = mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'teammate_pipeline.py';
+    const nextCode = mode === 'model_lens' ? DSAI_LEAKAGE_SAMPLE : PIPELINE_TRACER_SAMPLE;
+    const sampleName = mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'pipeline_tracer.py';
     setCode(nextCode);
     setSourceType('sample');
     setLoadedFileName(sampleName);
@@ -194,7 +361,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     triggerCodeFlash(
       mode === 'model_lens'
         ? '⚡ Loaded ModelLens Sample (dsai_leakage_sample.py)'
-        : '⚡ Loaded LogicLens Sample (teammate_pipeline.py)'
+        : '⚡ Loaded LogicLens Sample (pipeline_tracer.py)'
     );
   };
 
@@ -286,6 +453,44 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     setIsLoading(true);
     setTraceError(null);
     setTraceSteps(null);
+    setInstallState(null);
+
+    // Pre-check if any imported packages are missing
+    try {
+      const depCheck = await checkDependencies(code);
+      if (depCheck && Array.isArray(depCheck.missing) && depCheck.missing.length > 0) {
+        setInstallState({
+          isInstalling: true,
+          packages: depCheck.missing,
+          currentPackage: depCheck.missing[0],
+          completed: [],
+          progressPct: 15,
+          statusMessage: `Preparing to install ${depCheck.missing.length} missing package(s): ${depCheck.missing.join(', ')}...`,
+        });
+      }
+    } catch {
+      // Non-critical: continue to trace
+    }
+
+    // Start polling installation progress during trace
+    if (installPollRef.current) clearInterval(installPollRef.current);
+    installPollRef.current = setInterval(async () => {
+      try {
+        const status = await getInstallStatus();
+        if (status && (status.is_installing || status.progress_pct > 0)) {
+          setInstallState({
+            isInstalling: status.is_installing,
+            packages: status.packages || [],
+            currentPackage: status.current_package,
+            completed: status.completed || [],
+            progressPct: status.progress_pct,
+            statusMessage: status.status_message,
+          });
+        }
+      } catch {
+        // ignore polling error
+      }
+    }, 400);
 
     try {
       const response = await postTrace(code, mode);
@@ -320,7 +525,15 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       setTraceError(message);
       console.error('postTrace failed:', err);
     } finally {
+      if (installPollRef.current) {
+        clearInterval(installPollRef.current);
+        installPollRef.current = null;
+      }
       setIsLoading(false);
+      // Leave completion banner visible briefly (1s)
+      setTimeout(() => {
+        setInstallState(null);
+      }, 1000);
     }
   };
 
@@ -401,6 +614,103 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           )}
         </button>
       </div>
+
+      {/* Dynamic Sandbox Policy Warning: Disallowed Modules/Constructs Detected (Item 6) */}
+      {detectedRestricted.length > 0 && (
+        <div className="mb-4 p-4 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs shadow-lg shadow-amber-950/20 text-left animate-fadeIn">
+          <div className="flex items-start gap-3">
+            <span className="text-xl shrink-0 mt-0.5 leading-none">⚠️</span>
+            <div className="space-y-1.5 flex-1">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="font-bold text-amber-100 flex items-center gap-2">
+                  <span>Sandbox Restriction Warning</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-semibold border border-amber-500/30">
+                    {detectedRestricted.length} disallowed construct{detectedRestricted.length > 1 ? 's' : ''} detected
+                  </span>
+                </h4>
+                <span className="text-[10px] font-mono text-amber-400/80 bg-amber-900/40 px-2 py-0.5 rounded border border-amber-800/50">
+                  TraceLens Sandbox Policy
+                </span>
+              </div>
+              <p className="text-amber-200/90 text-[11px] leading-relaxed">
+                The execution sandbox blocks low-level system access, subprocesses, sockets, and raw file manipulation to guarantee deterministic tracing and isolate execution:
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {detectedRestricted.map((item) => (
+                  <span
+                    key={item.id}
+                    className="px-2.5 py-1 rounded-lg bg-amber-900/60 border border-amber-700/60 text-amber-200 font-mono text-[11px] flex items-center gap-1.5 shadow-sm"
+                    title={item.description}
+                  >
+                    <span className="text-amber-400 font-bold">🚫</span>
+                    <strong>{item.name}</strong>
+                    <span className="text-amber-300/70 text-[10px]">({item.label})</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-amber-300/80 pt-1">
+                💡 <strong>Tip:</strong> If reading external data files, upload them in the{' '}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('dataset')}
+                  className="underline font-semibold hover:text-cyan-300 text-amber-200 cursor-pointer"
+                >
+                  Upload Dataset
+                </button>{' '}
+                tab and load with <code className="text-cyan-300 bg-slate-900/80 px-1 py-0.5 rounded border border-slate-700 font-mono">pd.read_csv('filename.csv')</code> rather than calling <code className="text-amber-300 font-mono">open()</code>.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Package Installation Update Bar (Item 4) */}
+      {installState && (installState.isInstalling || installState.progressPct > 0) && (
+        <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-cyan-950/90 via-slate-900 to-indigo-950/90 border border-cyan-500/50 shadow-[0_0_30px_rgba(6,182,212,0.25)] text-left animate-fadeIn">
+          <div className="flex items-center justify-between gap-3 mb-2.5">
+            <div className="flex items-center gap-2.5">
+              <span className="w-5 h-5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold text-cyan-200 flex items-center gap-2">
+                  <span>Installing Missing Library:</span>
+                  <span className="font-mono px-2 py-0.5 rounded bg-cyan-900/60 border border-cyan-400/40 text-cyan-300">
+                    {installState.currentPackage || installState.packages?.[0] || 'package'}
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-300 font-mono mt-0.5">
+                  {installState.statusMessage || 'Preparing runtime environment via pip...'}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-xs font-mono font-bold text-cyan-400">
+                {installState.progressPct}%
+              </span>
+            </div>
+          </div>
+
+          {/* Glowing Animated Progress Bar */}
+          <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-700/60 relative">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 rounded-full transition-all duration-300 shadow-[0_0_14px_rgba(6,182,212,0.8)]"
+              style={{ width: `${Math.max(8, Math.min(100, installState.progressPct))}%` }}
+            />
+          </div>
+
+          {/* Subtext info */}
+          <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 font-mono flex-wrap gap-2">
+            <span className="flex items-center gap-1.5 text-cyan-300/90">
+              <span>⏱</span>
+              <span>Timeout isolated: package download time does <strong>not</strong> count towards the 30s limit</span>
+            </span>
+            {installState.packages && installState.packages.length > 1 && (
+              <span className="text-slate-400">
+                Package {(installState.completed?.length || 0) + 1} of {installState.packages.length}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tab A: Code Editor with Line Numbers & Fixed Dimensions */}
       {activeTab === 'editor' && (
@@ -716,6 +1026,46 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
         </div>
       )}
 
+      {/* Informational Guidance Cards: Sandbox Restrictions & Trace Recording Scope (Items 5 & 6) */}
+      <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
+        {/* Card 1: Sandbox Security & Package Auto-Preparation (Item 6 & Item 4) */}
+        <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-950/60 flex flex-col justify-between text-xs space-y-2">
+          <div>
+            <div className="flex items-center gap-2 font-bold text-slate-200 mb-1">
+              <span className="text-amber-400">🛡️</span>
+              <span>Sandbox Restrictions &amp; Dependencies</span>
+            </div>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              System modules (<code className="text-amber-300 font-mono">os</code>, <code className="text-amber-300 font-mono">sys</code>, <code className="text-amber-300 font-mono">subprocess</code>, <code className="text-amber-300 font-mono">socket</code>) and direct <code className="text-amber-300 font-mono">open()</code> cannot be traced in the sandbox. Standard third-party packages (e.g. <code className="text-cyan-300 font-mono">numpy</code>, <code className="text-cyan-300 font-mono">pandas</code>, <code className="text-cyan-300 font-mono">sklearn</code>) are automatically prepared.
+            </p>
+          </div>
+          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="flex items-center gap-1.5 text-cyan-400 font-mono text-[10px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              Package preparation does not reduce 30s execution timeout
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Trace Loading & Dynamic Scope Note (Item 5) */}
+        <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-950/60 flex flex-col justify-between text-xs space-y-2">
+          <div>
+            <div className="flex items-center gap-2 font-bold text-slate-200 mb-1">
+              <span className="text-sky-400">ℹ️</span>
+              <span>Why Did Part of My Code Not Load?</span>
+            </div>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              TraceLens records live runtime execution. If a code line does not execute at runtime (such as untaken <code className="text-sky-300 font-mono">if/else</code> branches, uncalled functions, or code after an early <code className="text-sky-300 font-mono">return</code>), it will not load into the trace replay.
+            </p>
+          </div>
+          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="text-slate-500 font-mono text-[10px]">
+              Unexecuted lines are flagged in the Studio Code Viewer
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Footer Details & Primary Action Button */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-800/80">
         <div className="text-xs text-slate-500 font-mono flex items-center gap-2.5 flex-wrap">
@@ -727,7 +1077,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           ) : sourceType === 'sample' ? (
             <span className="text-cyan-400 flex items-center gap-1.5">
               <span>⚡</span>
-              <span>Sample Script: <strong>{loadedFileName || (mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'teammate_pipeline.py')}</strong></span>
+              <span>Sample Script: <strong>{loadedFileName || (mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'pipeline_tracer.py')}</strong></span>
             </span>
           ) : (
             <span>Ready for analysis • Mode: {mode}</span>
@@ -750,7 +1100,11 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
             {isLoading ? (
               <>
                 <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
-                <span>Tracing…</span>
+                <span>
+                  {installState && installState.isInstalling
+                    ? `Installing ${installState.currentPackage || 'Package'}…`
+                    : 'Tracing…'}
+                </span>
               </>
             ) : (
               <>

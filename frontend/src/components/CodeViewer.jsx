@@ -109,6 +109,7 @@ export default function CodeViewer({
   onSelectLineRange = null,
   onClearLineRange = null,
   onExplainBlock = null,
+  traceSteps = [],
 }) {
   // Build a fast lookup: lineNumber → SafeInsertionPoint
   const safeLineMap = useMemo(() => {
@@ -132,11 +133,26 @@ export default function CodeViewer({
   // Stage 15: Auto-detected syntactic blocks
   const detectedBlocks = useMemo(() => detectCodeBlocks(code), [code]);
 
+  // Set of lines that were visited during execution in traceSteps
+  const executedLineNumbers = useMemo(() => {
+    if (!traceSteps || traceSteps.length === 0) return new Set();
+    return new Set(traceSteps.map((s) => s.line_number));
+  }, [traceSteps]);
+
   // Anchor line for Shift+click range selection
   const [anchorLine, setAnchorLine] = useState(null);
 
   const activeLine = currentStep?.line_number ?? null;
   const lines = code ? code.split('\n') : [];
+
+  // Count code lines (excluding blanks and comments) not reached in trace
+  const unexecutedCount = useMemo(() => {
+    if (executedLineNumbers.size === 0) return 0;
+    return lines.filter((l, idx) => {
+      const trimmed = l.trim();
+      return trimmed && !trimmed.startsWith('#') && !executedLineNumbers.has(idx + 1);
+    }).length;
+  }, [lines, executedLineNumbers]);
 
   // Ref map: lineNumber → DOM element
   const lineRefs = useRef({});
@@ -270,6 +286,18 @@ export default function CodeViewer({
         </div>
       )}
 
+      {/* Note: Inactive/unreached code lines indicator */}
+      {unexecutedCount > 0 && (
+        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-slate-900 border-b border-slate-800 text-[11px] font-mono text-slate-400">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sky-400">ℹ️</span>
+            <span>
+              <strong className="text-slate-300">Trace Loading Note:</strong> {unexecutedCount} line(s) did not load into the trace replay because they were not executed (untaken branches, uncalled functions, or early return).
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Code body — scrollable */}
       <div className="flex-1 overflow-y-auto overflow-x-auto text-xs leading-6 select-text p-1">
         {lines.map((rawLine, idx) => {
@@ -279,6 +307,7 @@ export default function CodeViewer({
             skippedRange != null &&
             lineNum >= skippedRange[0] &&
             lineNum <= skippedRange[1];
+          const isVisited = executedLineNumbers.size === 0 || executedLineNumbers.has(lineNum);
           const safePoint = safeLineMap[lineNum];
           const isSafePointSelected = selectedSafePoint?.line_number === lineNum;
 
@@ -306,6 +335,8 @@ export default function CodeViewer({
           const hazardTint =
             hasAudit && !isActive && !isSkipped && !isSelectedRange ? HAZARD_ROW_TINT[lineSeverity] : null;
 
+          const isUnvisitedCode = !isVisited && rawLine.trim() && !rawLine.trim().startsWith('#');
+
           return (
             <div
               key={lineNum}
@@ -313,6 +344,7 @@ export default function CodeViewer({
                 if (el) lineRefs.current[lineNum] = el;
               }}
               onClick={(e) => handleLineClick(lineNum, e)}
+              title={isUnvisitedCode ? 'Line was not executed at runtime — not loaded into the trace' : undefined}
               className={`flex items-stretch min-w-max transition-colors duration-100 cursor-pointer ${
                 isSelectedRange
                   ? isActive
@@ -322,7 +354,7 @@ export default function CodeViewer({
                     ? 'bg-cyan-500/15 border-l-2 border-cyan-400 shadow-sm'
                     : isSkipped
                       ? 'bg-red-950/20 border-l-2 border-red-800/40 opacity-40'
-                      : hazardTint || 'border-l-2 border-transparent hover:bg-slate-800/40'
+                      : hazardTint || (isUnvisitedCode ? 'border-l-2 border-transparent text-slate-400 opacity-80 hover:bg-slate-800/40' : 'border-l-2 border-transparent hover:bg-slate-800/40')
               }`}
             >
               {/* Gutter: line number */}
@@ -412,6 +444,18 @@ export default function CodeViewer({
                 <div className="shrink-0 flex items-center pr-2">
                   <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/20 border border-cyan-500/30 px-1.5 py-0.5 rounded shadow-sm">
                     ▶ step {currentStep.step_id ?? 0}
+                  </span>
+                </div>
+              )}
+
+              {/* Unexecuted line indicator (not loaded into trace) */}
+              {isUnvisitedCode && !isActive && !isSkipped && (
+                <div className="shrink-0 flex items-center pr-2 opacity-50 hover:opacity-100 transition-opacity">
+                  <span
+                    className="text-[9px] font-mono text-slate-500 bg-slate-900/90 border border-slate-800 px-1.5 py-0.5 rounded select-none"
+                    title="Not executed at runtime — not loaded into the trace recording"
+                  >
+                    unexecuted
                   </span>
                 </div>
               )}

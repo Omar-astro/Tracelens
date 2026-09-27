@@ -90,11 +90,17 @@ export default function TracePlayer({
   const isModelLens = mode === 'model_lens';
   const auditIssues = isModelLens ? mlAuditIssues : [];
 
+  // If in ModelLens mode, safe hooks are disabled; guarantee drawerTab is not 'hooks'
+  if (isModelLens && drawerTab === 'hooks') {
+    setDrawerTab('explainer');
+  }
+
   // When a new trace loads, drop any stale selection so the drawer starts clean.
   const handleGutterMarkerClick = useCallback((point) => {
+    if (isModelLens) return;
     setSelectedSafePoint(point);
     setDrawerTab('hooks');
-  }, []);
+  }, [isModelLens]);
 
   const handleAuditMarkerClick = useCallback((issue) => {
     setSelectedAuditIssue(issue);
@@ -437,9 +443,9 @@ export default function TracePlayer({
             fileName={fileName}
             currentStep={currentStep}
             skippedRange={currentStep?.branch_context?.skipped_range ?? null}
-            safeInsertionPoints={safeInsertionPoints}
-            selectedSafePoint={selectedSafePoint}
-            onGutterMarkerClick={setSelectedSafePoint}
+            safeInsertionPoints={isModelLens ? [] : safeInsertionPoints}
+            selectedSafePoint={isModelLens ? null : selectedSafePoint}
+            onGutterMarkerClick={isModelLens ? null : setSelectedSafePoint}
             onLineClick={(lineNum) => {
               const idx = traceSteps.findIndex(s => s.line_number === lineNum);
               if (idx !== -1) onSelectStepIndex(idx);
@@ -451,11 +457,12 @@ export default function TracePlayer({
             onSelectLineRange={handleSelectLineRange}
             onClearLineRange={handleClearLineRange}
             onExplainBlock={handleExplainBlock}
+            traceSteps={traceSteps}
           />
         </div>
 
         {/* CENTER (~35%): Stage 8 Visualizer Canvas */}
-        <div className="w-full lg:w-[35%] min-h-[220px] lg:min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-auto p-3 gap-3 bg-slate-950/50">
+        <div className="w-full lg:w-[35%] min-h-[220px] lg:min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-y-auto p-3 gap-3 bg-slate-950/50">
           {/* LoopVisualizer — shown when step has loop_context */}
           {currentStep?.loop_context && (
             <LoopVisualizer
@@ -472,6 +479,7 @@ export default function TracePlayer({
             traceSteps={traceSteps}
             currentStepIndex={currentStepIndex}
             currentStep={currentStep}
+            fileName={fileName}
           />
 
           {/* BranchVisualizer — shown when step has branch_context */}
@@ -510,26 +518,28 @@ export default function TracePlayer({
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setDrawerTab('hooks')}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
-                  drawerTab === 'hooks'
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Stage 10 Safe Insertion Hooks"
-              >
-                <span className="text-amber-400 font-bold leading-none">★</span>
-                <span>Safe Hooks</span>
-                {safeInsertionPoints.length > 0 && (
-                  <span className={`px-1 py-0.2 rounded text-[9px] ${
-                    drawerTab === 'hooks' ? 'bg-slate-950 text-amber-300' : 'bg-slate-900/80 text-slate-300'
-                  }`}>
-                    {safeInsertionPoints.length}
-                  </span>
-                )}
-              </button>
+              {!isModelLens && (
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab('hooks')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                    drawerTab === 'hooks'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="Stage 10 Safe Insertion Hooks"
+                >
+                  <span className="text-amber-400 font-bold leading-none">★</span>
+                  <span>Safe Hooks</span>
+                  {safeInsertionPoints.length > 0 && (
+                    <span className={`px-1 py-0.2 rounded text-[9px] ${
+                      drawerTab === 'hooks' ? 'bg-slate-950 text-amber-300' : 'bg-slate-900/80 text-slate-300'
+                    }`}>
+                      {safeInsertionPoints.length}
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* Stage 14: ModelLens remediation — only in model_lens mode */}
               {isModelLens && (
@@ -581,16 +591,18 @@ export default function TracePlayer({
                 selectedLineRange={selectedLineRange}
                 onClearLineRange={handleClearLineRange}
                 terminalVariables={terminalVariables}
-                safeInsertionPoints={safeInsertionPoints}
+                safeInsertionPoints={isModelLens ? [] : safeInsertionPoints}
                 onSelectSafePoint={(pt) => {
-                  setSelectedSafePoint(pt);
-                  setDrawerTab('hooks');
+                  if (!isModelLens) {
+                    setSelectedSafePoint(pt);
+                    setDrawerTab('hooks');
+                  }
                 }}
               />
             )}
 
 
-            {drawerTab === 'hooks' && (
+            {drawerTab === 'hooks' && !isModelLens && (
               <HandoffDrawer
                 selectedPoint={selectedSafePoint}
                 safeInsertionPoints={safeInsertionPoints}
@@ -613,7 +625,7 @@ export default function TracePlayer({
             {drawerTab === 'summary' && (
               <HandoffSummaryPane
                 code={code}
-                safeInsertionPoints={safeInsertionPoints}
+                safeInsertionPoints={isModelLens ? [] : safeInsertionPoints}
                 terminalVariables={terminalVariables}
                 summary={handoffSummary}
                 onSummaryGenerated={onHandoffSummaryGenerated}

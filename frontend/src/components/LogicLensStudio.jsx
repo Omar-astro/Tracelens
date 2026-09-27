@@ -68,7 +68,7 @@ export default function LogicLensStudio({
         </div>
 
         {/* PANES 2 & 3: Control Flow, Visualizer & State Board (4 cols on xl) */}
-        <div className="xl:col-span-4 flex flex-col gap-gutter">
+        <div className="xl:col-span-4 flex flex-col gap-gutter overflow-y-auto">
           {/* PANE 2: Loop Visualizer & Branch Evaluator */}
           <LoopVisualizer
             currentStep={currentStep}
@@ -83,6 +83,7 @@ export default function LogicLensStudio({
             traceSteps={traceSteps}
             currentStepIndex={currentStepIndex}
             currentStep={currentStep}
+            fileName={fileName}
           />
 
           <BranchVisualizer currentStep={currentStep} />

@@ -105,7 +105,7 @@ export default function BranchVisualizer({ currentStep }) {
   } = branchContext;
 
   return (
-    <div className={`rounded-lg p-space-md border shadow-md flex flex-col gap-space-xs transition-all ${
+    <div className={`rounded-lg p-space-md border shadow-md flex flex-col gap-space-xs transition-all shrink-0 ${
       evaluated_truth
         ? 'bg-secondary-container/10 border-secondary/40'
         : 'bg-error-container/10 border-error/40'

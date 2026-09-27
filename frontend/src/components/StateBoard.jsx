@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 export default function StateBoard({ currentStep, traceSteps = [], onJumpToStep = null }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedVar, setExpandedVar] = useState(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Build varName → first step index where that variable was created.
   // Computed once per trace (traceSteps is stable between steps).
@@ -35,10 +36,10 @@ export default function StateBoard({ currentStep, traceSteps = [], onJumpToStep 
   );
 
   return (
-    <div className="bg-surface-container-low rounded-lg p-space-md border border-surface-variant/30 flex flex-col gap-space-md shadow-md">
+    <div className="bg-surface-container-low rounded-lg p-space-md border border-surface-variant/30 flex flex-col gap-space-md shadow-md shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-surface-variant/20 pb-2">
-        <div className="flex items-center gap-space-xs">
+        <div className="flex items-center gap-space-xs cursor-pointer select-none" onClick={() => setIsCollapsed(!isCollapsed)}>
           <span className="material-symbols-outlined text-[18px] text-secondary">
             memory
           </span>
@@ -47,10 +48,24 @@ export default function StateBoard({ currentStep, traceSteps = [], onJumpToStep 
           </h3>
         </div>
 
-        <span className="px-space-xs py-0.5 rounded bg-surface-container-high text-outline font-label-xs text-label-xs font-mono">
-          STEP #{currentStep?.step_id || 1} DELTAS
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="px-space-xs py-0.5 rounded bg-surface-container-high text-outline font-label-xs text-label-xs font-mono">
+            STEP #{currentStep?.step_id || 1} DELTAS
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="text-[10px] font-mono text-slate-400 hover:text-slate-200 px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high border border-surface-variant/30 transition-colors cursor-pointer"
+            title={isCollapsed ? 'Show State & Mutation Inspector' : 'Collapse State & Mutation Inspector'}
+          >
+            {isCollapsed ? '▼ Show' : '▲ Hide'}
+          </button>
+        </div>
       </div>
+
+      {!isCollapsed && (
+        <>
 
       {/* TOP SECTION: Variable Deltas this Step */}
       <div className="flex flex-col gap-1.5">
@@ -197,6 +212,8 @@ export default function StateBoard({ currentStep, traceSteps = [], onJumpToStep 
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

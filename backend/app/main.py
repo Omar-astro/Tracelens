@@ -52,6 +52,12 @@ app.include_router(explain_router)
 app.include_router(dataset_router)
 
 
+@app.get("/")
+def root():
+    """Root route returning API status."""
+    return {"status": "ok", "service": "TraceLens API"}
+
+
 @app.get("/health")
 def health():
     """Health check route returning status ok per Stage 1 specification."""

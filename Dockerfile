@@ -17,5 +17,6 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 COPY backend /app/backend
 
 EXPOSE 8000
+EXPOSE 8080
 
 CMD ["python", "/app/backend/run.py"]

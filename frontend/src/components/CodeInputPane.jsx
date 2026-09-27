@@ -60,7 +60,58 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
   const [sourceType, setSourceType] = useState('editor'); // 'editor' | 'file' | 'sample'
   const [loadedFileName, setLoadedFileName] = useState('');
   const [fileMetadata, setFileMetadata] = useState(null);
+  const [isSampleActive, setIsSampleActive] = useState(false);
+  const [codeFlash, setCodeFlash] = useState(false);
+  const [sampleNotification, setSampleNotification] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const notificationTimeoutRef = useRef(null);
+  const flashTimeoutRef = useRef(null);
+  const prevModeRef = useRef(mode);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
+    };
+  }, []);
+
+  const triggerCodeFlash = (message) => {
+    setCodeFlash(true);
+    setSampleNotification(message);
+
+    if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    flashTimeoutRef.current = setTimeout(() => {
+      setCodeFlash(false);
+    }, 850);
+
+    if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
+    notificationTimeoutRef.current = setTimeout(() => {
+      setSampleNotification(null);
+    }, 2600);
+  };
+
+  // When mode changes, if sample was active/toggled, auto-update sample code and notify user
+  useEffect(() => {
+    if (prevModeRef.current !== mode) {
+      if (isSampleActive) {
+        const nextCode = mode === 'model_lens' ? DSAI_LEAKAGE_SAMPLE : TEAMMATE_PIPELINE_SAMPLE;
+        const sampleName = mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'teammate_pipeline.py';
+        setCode(nextCode);
+        setLoadedFileName(sampleName);
+        setSourceType('sample');
+        setFileMetadata(null);
+        setActiveTab('editor');
+
+        triggerCodeFlash(
+          mode === 'model_lens'
+            ? '⚡ Switched to ModelLens Sample (dsai_leakage_sample.py)'
+            : '⚡ Switched to LogicLens Sample (teammate_pipeline.py)'
+        );
+      }
+      prevModeRef.current = mode;
+    }
+  }, [mode, isSampleActive]);
 
   useEffect(() => {
     if (initialCode) {
@@ -129,23 +180,39 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     }
   };
 
-  // Populate code with Appendix C sample
-  const handleLoadSample = () => {
-    setCode(TEAMMATE_PIPELINE_SAMPLE);
+  // Glowy Sample Script loader with mode-adaptive sample switching
+  const handleToggleSample = () => {
+    const nextCode = mode === 'model_lens' ? DSAI_LEAKAGE_SAMPLE : TEAMMATE_PIPELINE_SAMPLE;
+    const sampleName = mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'teammate_pipeline.py';
+    setCode(nextCode);
     setSourceType('sample');
-    setLoadedFileName('Sample Script');
+    setLoadedFileName(sampleName);
     setFileMetadata(null);
+    setIsSampleActive(true);
     setActiveTab('editor');
+
+    triggerCodeFlash(
+      mode === 'model_lens'
+        ? '⚡ Loaded ModelLens Sample (dsai_leakage_sample.py)'
+        : '⚡ Loaded LogicLens Sample (teammate_pipeline.py)'
+    );
   };
 
-  // Stage 14: Appendix C.2 ModelLens sample — switch the caller to ModelLens mode too
+  // Populate code with Appendix C sample
+  const handleLoadSample = () => {
+    handleToggleSample();
+  };
+
+  // Stage 14: Appendix C.2 ModelLens sample — switch caller to ModelLens
   const handleLoadLeakageSample = () => {
+    if (onRequestMode) onRequestMode('model_lens');
     setCode(DSAI_LEAKAGE_SAMPLE);
     setSourceType('sample');
-    setLoadedFileName('Sample Script');
+    setLoadedFileName('dsai_leakage_sample.py');
     setFileMetadata(null);
+    setIsSampleActive(true);
     setActiveTab('editor');
-    if (onRequestMode) onRequestMode('model_lens');
+    triggerCodeFlash('⚡ Loaded ModelLens Sample (dsai_leakage_sample.py)');
   };
 
   // Process file upload (.py or .ipynb)
@@ -175,6 +242,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
       setCode(extractedCode);
       setSourceType('file');
       setLoadedFileName(file.name);
+      setIsSampleActive(false);
 
       const calculatedLines = extractedCode ? extractedCode.split('\n').length : 0;
       const formattedSize = file.size > 1024 * 1024
@@ -199,6 +267,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
     setSourceType('editor');
     setLoadedFileName('');
     setFileMetadata(null);
+    setIsSampleActive(false);
   };
 
   const handleDrop = (e) => {
@@ -295,19 +364,6 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
             )}
           </button>
 
-          {/* Sample Script */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('sample')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
-              activeTab === 'sample'
-                ? 'bg-slate-800 text-cyan-400 border border-cyan-500/30 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            Sample Script
-          </button>
-
           {/* Upload Dataset */}
           <button
             type="button"
@@ -327,52 +383,77 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           </button>
         </div>
 
-        {/* Quick action button for Sample Teammate Script */}
+        {/* Glowy Sample Script Action & Toggle Button */}
         <button
           type="button"
-          onClick={handleLoadSample}
-          className="text-xs font-mono px-3 py-1.5 rounded-lg bg-cyan-950/40 text-cyan-400 border border-cyan-700/40 hover:bg-cyan-900/50 hover:border-cyan-500 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+          onClick={handleToggleSample}
+          className={`text-xs font-mono font-semibold px-4 py-1.5 rounded-lg border transition-all duration-300 inline-flex items-center gap-2 cursor-pointer ${
+            isSampleActive
+              ? 'bg-gradient-to-r from-cyan-950 via-slate-900 to-indigo-950 text-cyan-200 border-cyan-400 shadow-[0_0_22px_rgba(6,182,212,0.45)] ring-1 ring-cyan-400/60'
+              : 'bg-cyan-950/40 hover:bg-cyan-900/50 text-cyan-300 hover:text-cyan-100 border-cyan-500/40 hover:border-cyan-400 shadow-[0_0_14px_rgba(6,182,212,0.25)] hover:shadow-[0_0_22px_rgba(6,182,212,0.5)]'
+          }`}
+          title={`Load sample script for ${mode === 'model_lens' ? 'ModelLens' : 'LogicLens'} (auto-switches with mode)`}
         >
-          <span>⚡</span>
-          <span>Load Sample Teammate Script</span>
+          <span className="text-sm">⚡</span>
+          <span>Sample Script</span>
+          {isSampleActive && (
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
+          )}
         </button>
       </div>
 
       {/* Tab A: Code Editor with Line Numbers & Fixed Dimensions */}
       {activeTab === 'editor' && (
-        <div className="relative font-mono text-xs rounded-xl border border-slate-800 bg-slate-950 overflow-hidden flex h-[380px]">
-          {/* Gutter with line numbers */}
-          <div
-            ref={lineNumbersRef}
-            aria-hidden="true"
-            className="w-12 py-3 bg-slate-900/60 border-r border-slate-800 text-slate-600 text-right pr-3 select-none overflow-hidden leading-6 font-mono h-full pointer-events-none shrink-0"
-          >
-            {Array.from({ length: lineCount }, (_, i) => (
-              <div key={i + 1}>{i + 1}</div>
-            ))}
-          </div>
+        <div className="relative">
+          {/* Visual Notification on Code Change */}
+          {sampleNotification && (
+            <div className="absolute -top-3.5 right-3 z-10 flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/95 border border-cyan-400 text-cyan-200 text-[11px] font-mono shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all animate-bounce">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+              <span>{sampleNotification}</span>
+            </div>
+          )}
 
-          {/* Raw code textarea with internal scrolling */}
-          <textarea
-            ref={textareaRef}
-            value={code}
-            onChange={(e) => {
-              const val = e.target.value;
-              setCode(val);
-              if (fileMetadata) {
-                setFileMetadata((prev) =>
-                  prev ? { ...prev, lineCount: val.split('\n').length } : null
-                );
-              } else if (sourceType !== 'file') {
-                setSourceType('editor');
-                setLoadedFileName('');
-              }
-            }}
-            onScroll={handleScroll}
-            spellCheck={false}
-            placeholder={`# Paste teammate Python code here to trace runtime execution...\n# Example:\n# raw_logs = [{"user": "alice", "action": "login"}]\n# for record in raw_logs:\n#     print(record)`}
-            className="flex-1 p-3 bg-transparent text-slate-100 placeholder-slate-600 outline-none resize-none leading-6 font-mono focus:ring-0 h-full overflow-y-auto overflow-x-auto whitespace-pre"
-          />
+          <div
+            className={`relative font-mono text-xs rounded-xl border bg-slate-950 overflow-hidden flex h-[380px] transition-all duration-500 ${
+              codeFlash
+                ? 'border-cyan-400 ring-2 ring-cyan-400/70 shadow-[0_0_35px_rgba(6,182,212,0.5)]'
+                : 'border-slate-800'
+            }`}
+          >
+            {/* Gutter with line numbers */}
+            <div
+              ref={lineNumbersRef}
+              aria-hidden="true"
+              className="w-12 py-3 bg-slate-900/60 border-r border-slate-800 text-slate-600 text-right pr-3 select-none overflow-hidden leading-6 font-mono h-full pointer-events-none shrink-0"
+            >
+              {Array.from({ length: lineCount }, (_, i) => (
+                <div key={i + 1}>{i + 1}</div>
+              ))}
+            </div>
+
+            {/* Raw code textarea with internal scrolling */}
+            <textarea
+              ref={textareaRef}
+              value={code}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCode(val);
+                setIsSampleActive(false);
+                if (fileMetadata) {
+                  setFileMetadata((prev) =>
+                    prev ? { ...prev, lineCount: val.split('\n').length } : null
+                  );
+                } else if (sourceType !== 'file') {
+                  setSourceType('editor');
+                  setLoadedFileName('');
+                }
+              }}
+              onScroll={handleScroll}
+              spellCheck={false}
+              placeholder={`# Paste teammate Python code here to trace runtime execution...\n# Example:\n# raw_logs = [{"user": "alice", "action": "login"}]\n# for record in raw_logs:\n#     print(record)`}
+              className="flex-1 p-3 bg-transparent text-slate-100 placeholder-slate-600 outline-none resize-none leading-6 font-mono focus:ring-0 h-full overflow-y-auto overflow-x-auto whitespace-pre"
+            />
+          </div>
         </div>
       )}
 
@@ -470,62 +551,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
         </div>
       )}
 
-      {/* Tab C: Sample Teammate Script Details & Loader */}
-      {activeTab === 'sample' && (
-        <div className="flex flex-col gap-4 text-left">
-          {/* Appendix C.1 — Mode 1 primary demo */}
-          <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/60">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-200">
-                  Appendix C.1: teammate_pipeline.py
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Inherited script from teammate Alex with loop sanitization, error counting, and safe hook point.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleLoadSample}
-                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Load Sample Teammate Script
-              </button>
-            </div>
-            <pre className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto leading-5">
-              {TEAMMATE_PIPELINE_SAMPLE}
-            </pre>
-          </div>
 
-          {/* Appendix C.2 — Stage 14: Mode 2 secondary demo */}
-          <div className="p-5 rounded-xl border border-rose-900/50 bg-rose-950/10">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                  Appendix C.2: dsai_leakage_sample.py
-                  <span className="text-[9px] font-mono uppercase tracking-wider text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded">
-                    ModelLens
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Inherited from Jordan (Data Scientist). Deliberate data leakage — the scaler is fitted across the
-                  full dataset before the split. Switches the mode selector to ModelLens.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleLoadLeakageSample}
-                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-colors cursor-pointer shrink-0"
-              >
-                Load Leakage Sample
-              </button>
-            </div>
-            <pre className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto leading-5">
-              {DSAI_LEAKAGE_SAMPLE}
-            </pre>
-          </div>
-        </div>
-      )}
 
       {/* Tab D: Dataset Upload (.csv, .parquet, .json, etc.) */}
       {activeTab === 'dataset' && (
@@ -701,7 +727,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
           ) : sourceType === 'sample' ? (
             <span className="text-cyan-400 flex items-center gap-1.5">
               <span>⚡</span>
-              <span>Sample Script loaded</span>
+              <span>Sample Script: <strong>{loadedFileName || (mode === 'model_lens' ? 'dsai_leakage_sample.py' : 'teammate_pipeline.py')}</strong></span>
             </span>
           ) : (
             <span>Ready for analysis • Mode: {mode}</span>

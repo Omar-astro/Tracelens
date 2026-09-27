@@ -537,7 +537,7 @@ export default function CodeInputPane({ mode = 'logic_lens', onTraceComplete, on
               <h4 className="font-bold text-slate-200">Session Dataset Storage</h4>
               <p className="text-slate-400 leading-relaxed">
                 Upload external dataset files (<code className="text-cyan-300 font-mono">.csv</code>, <code className="text-cyan-300 font-mono">.parquet</code>, <code className="text-cyan-300 font-mono">.json</code>, <code className="text-cyan-300 font-mono">.xlsx</code>). 
-                Once uploaded, your Python script can access it directly by filename (e.g. <code className="text-cyan-300 font-mono">pd.read_csv('housing 2.csv')</code>).
+                Once uploaded, your Python script can access it directly by filename, for example: <code className="text-cyan-300 font-mono">pd.read_csv('dataset.csv')</code>.
               </p>
               <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] font-mono text-cyan-400/90">
                 <span>⚡ Max file size: <strong>100 MB</strong></span>

@@ -2,80 +2,117 @@
 // Based on Master Implementation Plan (implementation_plan_tracelens.md) §8 & §11.1
 
 export const TEAMMATE_PIPELINE_CODE = `# teammate_pipeline.py — Inherited from "Alex" (Teammate)
+# Data sanitization, error triage, and metric aggregation pipeline.
+
 raw_logs = [
-    {"user": " alice ", "action": "login", "status": 200},
-    {"user": "bob", "action": "upload", "status": 500},
-    {"user": "", "action": "ping", "status": 200},
-    {"user": "charlie", "action": "logout", "status": 200}
+    {"user": " alice ", "action": "login", "status": 200, "duration_ms": 45},
+    {"user": "bob", "action": "upload_dataset", "status": 500, "duration_ms": 1200},
+    {"user": "", "action": "health_ping", "status": 200, "duration_ms": 5},
+    {"user": "charlie", "action": "query_db", "status": 404, "duration_ms": 310},
+    {"user": " dave ", "action": "export_model", "status": 200, "duration_ms": 850},
+    {"user": "eve", "action": "auth_refresh", "status": 401, "duration_ms": 90},
+    {"user": " frank", "action": "batch_inference", "status": 200, "duration_ms": 420},
 ]
 
 cleaned_records = []
 error_count = 0
+slow_queries = []
+action_counts = {}
 
-# Teammate loop: sanitize user records and count 500 errors
+print(f"[INGEST] Starting ingestion pipeline for {len(raw_logs)} raw records...")
+
+# Teammate loop: sanitize user records, classify anomalies, and aggregate stats
 for record in raw_logs:
     name = record["user"].strip().capitalize()
-    if len(name) > 0:
-        if record["status"] >= 400:
-            error_count += 1
-        cleaned_records.append({
-            "user": name,
-            "action": record["action"],
-            "success": record["status"] < 400
-        })
+    status = record["status"]
+    action = record["action"]
+    latency = record.get("duration_ms", 0)
 
-# [★ SAFE INSERTION POINT: Line 25]
-# Alex finished cleaning records. Safe to insert Slack alert webhook or extra filters here!
+    # Filter invalid/anonymous session records
+    if len(name) == 0:
+        print("[WARN] Dropping anonymous record with empty username")
+        continue
+
+    is_error = status >= 400
+    if is_error:
+        error_count += 1
+        print(f"[ALERT] Error flagged: user={name} action={action} code={status}")
+
+    # Track slow transactions (> 500ms)
+    if latency > 500:
+        slow_queries.append(name)
+
+    action_counts[action] = action_counts.get(action, 0) + 1
+
+    cleaned_records.append({
+        "user": name,
+        "action": action,
+        "success": not is_error,
+        "duration_ms": latency
+    })
+
+# Safe Hook Target: Downstream enrichments or alert webhooks can safely run here
+error_rate = round((error_count / len(cleaned_records)) * 100, 1) if cleaned_records else 0.0
+
 summary = {
-    "total_valid": len(cleaned_records),
-    "total_errors": error_count
+    "total_processed": len(cleaned_records),
+    "total_errors": error_count,
+    "error_rate_pct": error_rate,
+    "slow_transaction_users": slow_queries,
+    "unique_actions": len(action_counts)
 }
+
+print(f"[COMPLETE] Pipeline finished. Processed: {len(cleaned_records)}, Errors: {error_count}")
 print("Summary:", summary)`;
 
 export const SAFE_INSERTION_POINTS = [
   {
-    line_number: 25,
+    line_number: 52,
     target_variable: "cleaned_records",
     confidence: "high",
-    reason: "Alex finished sanitizing records from raw_logs. cleaned_records has reached its stable terminal state (3 records) and error_count is finalized (1). Safe to inject downstream feature engineering, validation webhooks, or Slack alerts before the summary dictionary is assembled.",
+    reason: "Alex finished sanitizing records from raw_logs. cleaned_records has reached its stable terminal state (6 records) and error_count is finalized (3). Safe to inject downstream feature engineering, validation webhooks, or Slack alerts before the summary dictionary is assembled.",
     suggested_action: "Inject Slack notification webhook or customer enricher",
     boilerplate_hook: `# Injected Safe Hook: Slack Alert on High Error Rates
 if error_count > 0:
-    error_rate = (error_count / len(raw_logs)) * 100
-    print(f"⚠️ Alert: Pipeline encountered {error_count} errors ({error_rate:.1f}%)")
+    print(f"⚠️ Alert: Pipeline flagged {error_count} errors out of {len(cleaned_records)} records ({error_rate}%)")
     # send_slack_alert(channel="#ops", message=f"Sanitization flagged {error_count} failures")`
   }
 ];
 
 export const TEAMMATE_HANDOFF_SUMMARY = {
-  overall_purpose: "Sanitizes raw user session logs, filters out blank/invalid user names, counts HTTP 4xx/5xx failure statuses, and builds an aggregated summary report.",
+  overall_purpose: "Sanitizes raw user session logs, flags latency anomalies, classifies HTTP 4xx/5xx failure statuses, and builds an aggregated operational summary report.",
   key_data_structures: [
     {
       name: "raw_logs",
-      role: "Input list of 4 dictionary event records with unstripped usernames and status codes",
-      final_state_summary: "List of 4 items (read-only, unmodified)"
+      role: "Input list of 7 dictionary event records with unstripped usernames, actions, statuses, and latency metrics",
+      final_state_summary: "List of 7 items (read-only, unmodified)"
     },
     {
       name: "cleaned_records",
-      role: "Sanitized output list containing capitalized names and normalized success boolean flags",
-      final_state_summary: "List of 3 dicts: Alice (success), Bob (failure), Charlie (success)"
+      role: "Sanitized output list containing capitalized names, duration metrics, and normalized success boolean flags",
+      final_state_summary: "List of 6 dicts with valid user identities and sanitized actions"
     },
     {
       name: "error_count",
       role: "Integer counter tracking total operations with status >= 400",
-      final_state_summary: "1 (Bob's 500 error)"
+      final_state_summary: "3 (Bob 500, Charlie 404, Eve 401)"
+    },
+    {
+      name: "slow_queries",
+      role: "List of user sessions exceeding 500ms execution latency",
+      final_state_summary: "['Bob', 'Dave']"
     },
     {
       name: "summary",
-      role: "Final reporting payload combining valid record count and total error count",
-      final_state_summary: "{ 'total_valid': 3, 'total_errors': 1 }"
+      role: "Final reporting payload combining processed count, error rates, slow queries, and unique action counts",
+      final_state_summary: "{ total_processed: 6, total_errors: 3, error_rate_pct: 50.0, slow_transaction_users: ['Bob', 'Dave'], unique_actions: 6 }"
     }
   ],
-  safe_continuation_strategy: "Inject your custom business logic at Line 25. The data structures cleaned_records and error_count are completely populated and immutable after the loop. Do not edit inside the loop body unless you are modifying individual record attributes.",
+  safe_continuation_strategy: "Inject your custom business logic at Line 52. The data structures cleaned_records, error_count, and slow_queries are completely populated and immutable after the loop. Do not edit inside the loop body unless modifying individual record attributes.",
   cautions_for_teammate: [
     "Do NOT modify raw_logs in-place — downstream telemetry relies on original order.",
-    "Record 3 has an empty username ('') and is intentionally dropped by if len(name) > 0.",
-    "Alex checks status >= 400 for errors, but sets success: status < 400."
+    "Record 3 has an empty username ('') and is intentionally skipped with a diagnostic warning.",
+    "Alex checks status >= 400 for errors, and flags transactions taking > 500ms in slow_queries."
   ]
 };
 

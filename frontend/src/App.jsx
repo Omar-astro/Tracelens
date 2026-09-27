@@ -1,23 +1,24 @@
 import React, { useState, useCallback } from 'react';
-import ModeSelector from './components/ModeSelector';
-import CodeInputPane from './components/CodeInputPane';
+import HomePage from './components/HomePage';
 import TracePlayer from './components/TracePlayer';
 import { postTrace } from './api/traceClient';
+import { clearExplanationCache } from './api/explanationCache';
 
 /**
- * TraceLens App — Stage 7: Studio Shell + Playback Scrubber.
+ * TraceLens App — Landing Home Page & Interactive Studio Shell.
  *
  * State machine:
- *   'intake'  — show ModeSelector + CodeInputPane
+ *   'home'    — show Landing Home Page (TraceLensHero + Lens breakdown + #try-it workspace)
  *   'studio'  — show TracePlayer (4-pane Studio layout) driven by real trace data
  */
 export default function App() {
   const [mode, setMode] = useState('logic_lens');
-  const [view, setView] = useState('intake'); // 'intake' | 'studio'
+  const [view, setView] = useState('home'); // 'home' | 'studio'
 
   // Trace state lifted from CodeInputPane via onTraceComplete
   const [traceSteps, setTraceSteps] = useState(null);               // TraceStep[] | null
   const [sourceCode, setSourceCode] = useState('');                 // last traced source.
+  const [sourceName, setSourceName] = useState('Code Editor');       // 'Code Editor' | file name | 'Sample Script'
   const [safeInsertionPoints, setSafeInsertionPoints] = useState([]); // Stage 10
   // Stage 14: ModelLens audit issues from the Stage 13 engine (model_lens mode only)
   const [mlAuditIssues, setMlAuditIssues] = useState([]);
@@ -25,12 +26,13 @@ export default function App() {
   // renders instantly on re-open and never re-calls the LLM.
   const [handoffSummary, setHandoffSummary] = useState(null);
 
-  // Playback state lives here so it persists when navigating back to intake
+  // Playback state lives here so it persists when navigating back to intake/home
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  const handleTraceComplete = useCallback((steps, code, safePoints = [], mlIssues = []) => {
+  const handleTraceComplete = useCallback((steps, code, safePoints = [], mlIssues = [], name = 'Code Editor') => {
+    clearExplanationCache();
     setTraceSteps(steps);
     setSourceCode(code);
     setSafeInsertionPoints(safePoints);
@@ -38,6 +40,7 @@ export default function App() {
     setHandoffSummary(null);
     setCurrentStepIndex(0);
     setIsPlaying(false);
+    setSourceName(name);
     setView('studio');
   }, []);
 
@@ -45,9 +48,18 @@ export default function App() {
     setHandoffSummary(summary);
   }, []);
 
-  const handleBackToIntake = useCallback(() => {
+  const handleBackToHome = useCallback(() => {
     setIsPlaying(false);
-    setView('intake');
+    setView('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleBackToEditor = useCallback(() => {
+    setIsPlaying(false);
+    setView('home');
+    setTimeout(() => {
+      document.getElementById('try-it')?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
   }, []);
 
   const handleApplyCodeFix = useCallback((newCode) => {
@@ -62,16 +74,17 @@ export default function App() {
         res.steps,
         newCode,
         res.safe_insertion_points || [],
-        res.ml_audit_issues || []
+        res.ml_audit_issues || [],
+        sourceName
       );
     } catch (err) {
       console.error("Failed to re-trace patched code:", err);
     }
-  }, [mode, handleTraceComplete]);
+  }, [mode, handleTraceComplete, sourceName]);
 
 
   // -------------------------------------------------------------------------
-  // Studio view
+  // Studio view (active trace replay)
   // -------------------------------------------------------------------------
   if (view === 'studio' && traceSteps && traceSteps.length > 0) {
     return (
@@ -82,9 +95,19 @@ export default function App() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={handleBackToIntake}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-100 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 transition-colors px-2.5 py-1 rounded-lg"
-              title="Return to Code Intake"
+              onClick={handleBackToHome}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-100 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 transition-colors px-2.5 py-1 rounded-lg cursor-pointer"
+              title="Return to Home Page"
+            >
+              <span>←</span>
+              <span>Home</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleBackToEditor}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-100 bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 transition-colors px-2.5 py-1 rounded-lg cursor-pointer"
+              title="Return to Code Intake & Editor"
             >
               <span>←</span>
               <span>Intake</span>
@@ -92,7 +115,11 @@ export default function App() {
 
             <div className="h-4 w-px bg-slate-800" />
 
-            <div className="flex items-center gap-2">
+            <div 
+              className="flex items-center gap-2 cursor-pointer"
+              onClick={handleBackToHome}
+              title="TraceLens Home"
+            >
               <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-400 to-indigo-600 flex items-center justify-center shadow-sm">
                 <span className="text-slate-950 font-black text-[11px] font-mono leading-none">TL</span>
               </div>
@@ -108,8 +135,9 @@ export default function App() {
 
             {/* Breadcrumb */}
             <div className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-slate-400">
-              <span className="text-slate-600">teammate_code /</span>
-              <span className="text-slate-200 font-medium">teammate_pipeline.py</span>
+              <span className="text-slate-400 font-semibold">{mode === 'logic_lens' ? 'LogicLens' : 'ModelLens'}</span>
+              <span className="text-slate-600">/</span>
+              <span className="text-slate-100 font-medium">{sourceName}</span>
             </div>
           </div>
 
@@ -132,6 +160,7 @@ export default function App() {
 
         <TracePlayer
           code={sourceCode}
+          fileName={sourceName}
           traceSteps={traceSteps}
           currentStepIndex={currentStepIndex}
           onSelectStepIndex={setCurrentStepIndex}
@@ -152,41 +181,17 @@ export default function App() {
   }
 
   // -------------------------------------------------------------------------
-  // Intake view (default)
+  // Home Page view (default landing page)
   // -------------------------------------------------------------------------
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center py-10 px-4 sm:px-6 font-sans">
-      {/* Brand Header */}
-      <header className="max-w-4xl w-full text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-mono mb-4">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          TraceLens — Runtime Flow &amp; Auditor
-        </div>
-
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-3 bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">
-          TraceLens
-        </h1>
-
-        <p className="text-slate-400 text-sm sm:text-base max-w-xl mx-auto">
-          Deterministic runtime execution visualizer and ML methodology auditor for seamless teammate handoff.
-        </p>
-      </header>
-
-      {/* Mode Selector */}
-      <ModeSelector mode={mode} onChange={setMode} />
-
-      {/* Code Input Pane — wired to real backend */}
-      <CodeInputPane
-        mode={mode}
-        onTraceComplete={handleTraceComplete}
-        onRequestMode={setMode}
-        initialCode={sourceCode}
-      />
-
-
-      <footer className="mt-12 text-center text-xs text-slate-600 font-mono">
-        TraceLens • Stage 14 ModelLens UI Active
-      </footer>
-    </main>
+    <HomePage
+      mode={mode}
+      setMode={setMode}
+      sourceCode={sourceCode}
+      onTraceComplete={handleTraceComplete}
+      hasActiveTrace={!!(traceSteps && traceSteps.length > 0)}
+      onNavigateToStudio={() => setView('studio')}
+      activeTraceStepCount={traceSteps?.length || 0}
+    />
   );
 }

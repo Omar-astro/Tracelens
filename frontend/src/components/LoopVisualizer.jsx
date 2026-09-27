@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 /**
  * LoopVisualizer — Stage 8
@@ -20,6 +20,7 @@ export default function LoopVisualizer({
   onJumpToIteration,
   onJumpToLoopExit,
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const loopContext = currentStep?.loop_context;
   if (!loopContext) return null;
 
@@ -85,10 +86,10 @@ export default function LoopVisualizer({
   });
 
   return (
-    <div className="bg-surface-container-low rounded-lg p-space-md border border-surface-variant/30 flex flex-col gap-space-sm shadow-md">
+    <div className="bg-surface-container-low rounded-lg p-space-md border border-surface-variant/30 flex flex-col gap-space-sm shadow-md shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-surface-variant/20 pb-2">
-        <div className="flex items-center gap-space-xs">
+        <div className="flex items-center gap-space-xs cursor-pointer select-none" onClick={() => setIsCollapsed(!isCollapsed)}>
           <span className="material-symbols-outlined text-[18px] text-primary">sync</span>
           <h3 className="font-headline-sm text-headline-sm text-on-surface">
             Loop Visualizer
@@ -108,16 +109,27 @@ export default function LoopVisualizer({
               type="button"
               onClick={onJumpToLoopExit}
               title="Fast-forward to loop exit"
-              className="px-2 py-0.5 rounded font-label-xs text-label-xs bg-primary-container/20 hover:bg-primary-container/30 text-primary border border-primary/40 font-mono flex items-center gap-1 transition-colors"
+              className="px-2 py-0.5 rounded font-label-xs text-label-xs bg-primary-container/20 hover:bg-primary-container/30 text-primary border border-primary/40 font-mono flex items-center gap-1 transition-colors cursor-pointer"
             >
               <span>ITERATION {current_iteration} OF {knownTotal}</span>
               <span className="material-symbols-outlined text-[12px]">fast_forward</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="text-[10px] font-mono text-slate-400 hover:text-slate-200 px-1.5 py-0.5 rounded bg-surface-container hover:bg-surface-container-high border border-surface-variant/30 transition-colors cursor-pointer"
+            title={isCollapsed ? 'Show Loop Visualizer' : 'Collapse Loop Visualizer'}
+          >
+            {isCollapsed ? '▼ Show' : '▲ Hide'}
+          </button>
         </div>
       </div>
 
-      {/* Progress + Target Variable */}
+      {!isCollapsed && (
+        <>
+          {/* Progress + Target Variable */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-space-sm items-center bg-surface-container-lowest p-space-sm rounded-lg border border-surface-variant/20">
         {/* Progress bar */}
         <div className="md:col-span-4 flex flex-col gap-1">
@@ -251,6 +263,8 @@ export default function LoopVisualizer({
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );

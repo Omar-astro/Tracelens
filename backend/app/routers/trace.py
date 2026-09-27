@@ -34,6 +34,11 @@ try:
         MLAuditIssue,
         run_ml_diagnostics,
     )
+    from backend.app.services.package_installer import (
+        prepare_environment_for_code,
+        get_install_status,
+        get_missing_libraries,
+    )
 except ImportError:
     from app.services.ast_flow import build_flow_index
     from app.services.sandbox import (
@@ -53,6 +58,11 @@ except ImportError:
     from app.services.ml_diagnostics import (
         MLAuditIssue,
         run_ml_diagnostics,
+    )
+    from app.services.package_installer import (
+        prepare_environment_for_code,
+        get_install_status,
+        get_missing_libraries,
     )
 
 router = APIRouter(prefix="/api", tags=["Trace"])
@@ -197,6 +207,14 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
 
     filename = payload.filename or "<tracelens_user_code>"
 
+    # Prepare external libraries if missing: download & install outside sandbox timeout
+    # NOTE: Library preparation executes BEFORE the sandbox starts, ensuring package download
+    # time does NOT count against the 30-second execution timeout timer.
+    try:
+        prepare_environment_for_code(code)
+    except Exception:
+        pass
+
     # Run execution in the deterministic sandboxed environment (Stage 4)
     res = trace_in_sandbox(code, max_steps=effective_max_steps)
 
@@ -220,11 +238,22 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
         )
 
     if res.error_code == ERR_BLOCKED_IMPORT or (
-        res.status == STATUS_ERROR and res.error and "TraceLens sandbox" in res.error
+        res.status == STATUS_ERROR
+        and res.error
+        and (
+            "TraceLens sandbox" in res.error
+            or "name 'open' is not defined" in res.error
+            or "blocked" in res.error.lower()
+        )
     ):
+        error_detail = (
+            "Security violation: filesystem 'open()' cannot be traced in the TraceLens sandbox. Please use the Upload Dataset tab and load files via pd.read_csv(...) instead."
+            if (res.error and "open" in res.error)
+            else (res.error or "Security violation: system modules ('os', 'sys', 'subprocess', 'socket') and filesystem 'open()' cannot be traced in the TraceLens sandbox.")
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=res.error or "Security violation: blocked module or builtin.",
+            detail=error_detail,
         )
 
     if res.status == STATUS_ERROR and not res.steps:
@@ -234,7 +263,8 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
         )
 
     # Compute safe insertion points across completed trace (Stage 9)
-    safe_points = find_safe_insertion_points(res.steps, code)
+    # Disabled in model_lens mode per requirement
+    safe_points = [] if payload.mode == "model_lens" else find_safe_insertion_points(res.steps, code)
 
     # Stage 13: ModelLens Diagnostics Engine pass when mode == "model_lens"
     ml_issues = None
@@ -246,3 +276,23 @@ def trace_code(payload: TraceRequest) -> TraceResponse:
         safe_insertion_points=safe_points,
         ml_audit_issues=ml_issues,
     )
+
+
+class CheckDependenciesPayload(BaseModel):
+    code: str
+
+
+@router.get("/install-status", tags=["Dependencies"])
+def get_dependency_install_status():
+    """Retrieve live status and progress of missing package preparation/installation."""
+    return get_install_status()
+
+
+@router.post("/check-dependencies", tags=["Dependencies"])
+def check_code_dependencies(payload: CheckDependenciesPayload):
+    """Scan source code for third-party libraries not installed in current environment."""
+    missing = get_missing_libraries(payload.code)
+    return {
+        "missing": missing,
+        "count": len(missing),
+    }

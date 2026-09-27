@@ -274,5 +274,66 @@ export async function applyBobRemediation(code, issue) {
   });
 }
 
+/**
+ * Request an AI-powered explanation for a multi-line code block (or arbitrary selected lines).
+ * Calls POST /api/explain-block.
+ *
+ * @param {object} params
+ * @param {string} params.code
+ * @param {number} params.start_line
+ * @param {number} params.end_line
+ * @param {string} [params.block_type]
+ * @param {string} [params.selected_code]
+ * @param {object} [params.all_variables]
+ * @param {string} [params.filename]
+ * @returns {Promise<any>} BlockExplanation
+ */
+export async function explainBlock({
+  code,
+  start_line,
+  end_line,
+  block_type = "block",
+  selected_code = null,
+  all_variables = {},
+  filename = "<tracelens_user_code>",
+}) {
+  if (typeof code !== "string" || !start_line || !end_line) {
+    throw new TraceApiError("Invalid parameters provided to explainBlock", 400);
+  }
+  return await postJson("/api/explain-block", {
+    code,
+    start_line,
+    end_line,
+    block_type,
+    selected_code,
+    all_variables,
+    filename,
+  });
+}
 
+/**
+ * Retrieve the current dependency installation status from the backend.
+ * @returns {Promise<{is_installing: boolean, packages: string[], current_package: string|null, completed: string[], progress_pct: number, status_message: string}>}
+ */
+export async function getInstallStatus() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/install-status`);
+    if (!res.ok) return { is_installing: false, progress_pct: 0, packages: [], status_message: "" };
+    return await res.json();
+  } catch {
+    return { is_installing: false, progress_pct: 0, packages: [], status_message: "" };
+  }
+}
 
+/**
+ * Check which imported libraries in the code are not installed in the backend environment.
+ * @param {string} code
+ * @returns {Promise<{missing: string[], count: number}>}
+ */
+export async function checkDependencies(code) {
+  try {
+    return await postJson("/api/check-dependencies", { code });
+  } catch {
+    return { missing: [], count: 0 };
+  }
+}

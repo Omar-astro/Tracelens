@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import LogicLensScrubber from './LogicLensScrubber';
 import LogicLensCodeViewer from './LogicLensCodeViewer';
 import LoopVisualizer from './LoopVisualizer';
+import TerminalOutputPane from './TerminalOutputPane';
 import BranchVisualizer from './BranchVisualizer';
 import StateBoard from './StateBoard';
 import TeammateHandoffDrawer from './TeammateHandoffDrawer';
@@ -67,7 +68,7 @@ export default function LogicLensStudio({
         </div>
 
         {/* PANES 2 & 3: Control Flow, Visualizer & State Board (4 cols on xl) */}
-        <div className="xl:col-span-4 flex flex-col gap-gutter">
+        <div className="xl:col-span-4 flex flex-col gap-gutter overflow-y-auto">
           {/* PANE 2: Loop Visualizer & Branch Evaluator */}
           <LoopVisualizer
             currentStep={currentStep}
@@ -76,6 +77,13 @@ export default function LogicLensStudio({
               const idx = traceSteps.findIndex(s => s.event_type === 'loop_exit');
               if (idx !== -1) onSelectStepIndex(idx);
             }}
+          />
+
+          <TerminalOutputPane
+            traceSteps={traceSteps}
+            currentStepIndex={currentStepIndex}
+            currentStep={currentStep}
+            fileName={fileName}
           />
 
           <BranchVisualizer currentStep={currentStep} />

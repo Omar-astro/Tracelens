@@ -301,9 +301,10 @@ class _BoundedStdout(io.StringIO):
 def _apply_resource_limits(cpu_seconds: int, memory_limit_mb: Optional[int]) -> None:
     """Best-effort OS-enforced ceilings. No-op on Windows.
 
-    These are set in the child before any user code runs, which is the whole
-    point: a Python-level `try/except` cannot catch SIGKILL from RLIMIT_CPU, and
-    an allocation bomb trips RLIMIT_AS before the wall-clock timeout does.
+    We enforce CPU limits if supported, but do not set RLIMIT_AS on data-science/ML
+    stacks (NumPy, Pandas, Scikit-learn, Imbalanced-learn) because C-extensions
+    and BLAS/OpenMP memory-mapping allocate large virtual address spaces, which trips
+    RLIMIT_AS and causes abrupt OS process termination before Python can report results.
     """
     if _resource is None:
         return
@@ -311,12 +312,6 @@ def _apply_resource_limits(cpu_seconds: int, memory_limit_mb: Optional[int]) -> 
         _resource.setrlimit(_resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
     except (ValueError, OSError):
         pass
-    if memory_limit_mb:
-        try:
-            byte_limit = memory_limit_mb * 1024 * 1024
-            _resource.setrlimit(_resource.RLIMIT_AS, (byte_limit, byte_limit))
-        except (ValueError, OSError):
-            pass
 
 
 # --------------------------------------------------------------------------
